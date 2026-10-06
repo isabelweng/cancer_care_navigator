@@ -1,0 +1,664 @@
+<title>Cancer Care Navigator</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
+<style>
+/* Layout: teal app bar, step tabs, one card per step; results pair a wide table with a map + detail panel (stacks on phones). */
+:root {
+  --bg: #f4f6f5; --card: #ffffff; --ink: #18201d; --ink2: #5a625e; --line: rgba(0,0,0,.12);
+  --brand: #0f6e56; --brand-ink: #ffffff; --brand-soft: #e1f5ee; --brand-strong: #085041;
+  --info-bg: #e6f1fb; --info-ink: #0c447c; --warn-bg: #faeeda; --warn-ink: #633806; --err-bg: #faece7; --err-ink: #7a2a10;
+  --ok: #1d9e75; --tag-trial-bg: #eeedfe; --tag-trial-ink: #3c3489; --tag-doc-bg: #eaf3de; --tag-doc-ink: #27500a;
+  --hl: #fff3c4; --land: #eef1ec; --county: #d9ded8; --state: #9aa39d; --water: #e3edf3;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #141917; --card: #1e2421; --ink: #e9eeeb; --ink2: #a5aea9; --line: rgba(255,255,255,.13);
+  --brand: #3fbf98; --brand-ink: #0b1a15; --brand-soft: #173a30; --brand-strong: #bfeedd;
+  --info-bg: #14283d; --info-ink: #cfe3f8; --warn-bg: #3a2c12; --warn-ink: #f7d9a2; --err-bg: #3b2018; --err-ink: #f6c8b7;
+  --ok: #5fd0a8; --tag-trial-bg: #25223f; --tag-trial-ink: #d7d4fb; --tag-doc-bg: #1e2f12; --tag-doc-ink: #cfe8b3;
+  --hl: #4a3f12; --land: #232a27; --county: #2f3733; --state: #6b756f; --water: #18222a; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #141917; --card: #1e2421; --ink: #e9eeeb; --ink2: #a5aea9; --line: rgba(255,255,255,.13);
+  --brand: #3fbf98; --brand-ink: #0b1a15; --brand-soft: #173a30; --brand-strong: #bfeedd;
+  --info-bg: #14283d; --info-ink: #cfe3f8; --warn-bg: #3a2c12; --warn-ink: #f7d9a2; --err-bg: #3b2018; --err-ink: #f6c8b7;
+  --ok: #5fd0a8; --tag-trial-bg: #25223f; --tag-trial-ink: #d7d4fb; --tag-doc-bg: #1e2f12; --tag-doc-ink: #cfe8b3;
+  --hl: #4a3f12; --land: #232a27; --county: #2f3733; --state: #6b756f; --water: #18222a; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 14px/1.5 var(--font); margin: 0; }
+a { color: var(--info-ink); }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+h1, h2 { margin: 0; text-wrap: balance; }
+.bar { background: #0f6e56; color: #fff; padding: 12px 16px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.logo { width: 32px; height: 32px; border-radius: 8px; background: #fff; display: grid; place-items: center; flex-shrink: 0; }
+.bar h1 { font-size: 17px; font-weight: 650; }
+.bar p { margin: 0; font-size: 12px; opacity: .82; }
+.bar .mode { margin-left: auto; font-size: 12px; background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.35); padding: 3px 10px; border-radius: 99px; }
+.tabs { display: flex; overflow-x: auto; background: var(--card); border-bottom: 1px solid var(--line); padding-inline: 8px; }
+.tab { background: none; border: 0; border-bottom: 2px solid transparent; padding: 11px 12px; color: var(--ink2); cursor: pointer; white-space: nowrap; display: flex; gap: 6px; align-items: center; font-size: 13px; }
+.tab b { width: 18px; height: 18px; border-radius: 50%; background: var(--line); display: inline-grid; place-items: center; font-size: 10px; color: var(--ink); }
+.tab[aria-selected="true"] { color: var(--brand); border-bottom-color: var(--brand); font-weight: 650; }
+.tab[aria-selected="true"] b, .tab.done b { background: var(--brand); color: var(--brand-ink); }
+.wrap { max-width: 1100px; margin: 0 auto; padding-inline: 16px; padding-block: 16px 32px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 14px; }
+.card > h2 { font-size: 15px; margin-bottom: 2px; }
+.sub { color: var(--ink2); font-size: 12px; margin: 0 0 12px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.grid2 { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 10px; }
+@media (max-width: 680px) { .grid3, .grid2 { grid-template-columns: 1fr; } }
+.fg { display: grid; gap: 4px; margin-bottom: 10px; min-width: 0; }
+.fg label { font-size: 12px; color: var(--ink2); }
+.fg input, .fg select, .fg textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); }
+textarea { min-height: 120px; resize: vertical; }
+.lbl { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink2); margin: 4px 0 8px; }
+.btn { border: 1px solid var(--brand); background: var(--brand); color: var(--brand-ink); border-radius: 8px; padding: 8px 14px; font-weight: 650; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
+.btn.ghost { background: transparent; color: var(--ink); border-color: var(--line); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.nav { display: flex; justify-content: space-between; gap: 8px; border-top: 1px solid var(--line); padding-top: 14px; }
+.note { border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; font-size: 13px; }
+.note.info { background: var(--info-bg); color: var(--info-ink); }
+.note.warn { background: var(--warn-bg); color: var(--warn-ink); }
+.note.err { background: var(--err-bg); color: var(--err-ink); }
+.note.ok { background: var(--brand-soft); color: var(--brand-strong); }
+.small { font-size: 12px; color: var(--ink2); }
+.tag { display: inline-block; border-radius: 99px; padding: 1px 8px; font-size: 11px; font-weight: 650; margin: 1px 4px 1px 0; white-space: nowrap; }
+.t-NCCN { background: var(--brand-soft); color: var(--brand-strong); }
+.t-Emerging { background: var(--info-bg); color: var(--info-ink); }
+.t-Trial { background: var(--tag-trial-bg); color: var(--tag-trial-ink); }
+.t-Doctor { background: var(--tag-doc-bg); color: var(--tag-doc-ink); }
+.t-high { background: var(--err-bg); color: var(--err-ink); } .t-medium { background: var(--warn-bg); color: var(--warn-ink); } .t-low { background: var(--brand-soft); color: var(--brand-strong); }
+.tbl-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 620px; }
+th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--ink2); padding: 8px 10px; border-bottom: 1px solid var(--line); background: var(--bg); }
+td { padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr.hl td { background: var(--hl); }
+.sgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+@media (max-width: 680px) { .sgrid { grid-template-columns: 1fr; } }
+.si { background: var(--bg); border-radius: 8px; padding: 9px 11px; min-width: 0; }
+.si strong { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--ink2); margin-bottom: 3px; }
+.si ul { margin: 0; padding-left: 16px; }
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.steps li { display: flex; gap: 8px; align-items: center; }
+.dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--line); flex-shrink: 0; }
+.dot.run { border-color: var(--brand); border-top-color: transparent; animation: spin .8s linear infinite; }
+.dot.ok { background: var(--ok); border-color: var(--ok); }
+.dot.bad { background: #d85a30; border-color: #d85a30; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .dot.run { animation: none; } }
+.trial { border: 1px solid var(--line); border-radius: 10px; padding: 11px; margin-bottom: 8px; }
+.split { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+@media (max-width: 860px) { .split { grid-template-columns: 1fr; } }
+.mapbox { position: relative; width: 100%; aspect-ratio: 4 / 3; max-width: 100%; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--water); }
+.mapbox svg { width: 100%; height: 100%; display: block; }
+.pop { position: absolute; transform: translate(-50%, calc(-100% - 22px)); background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 12px; width: max-content; max-width: 240px; box-shadow: 0 4px 14px rgba(0,0,0,.18); }
+.chip { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--line); border-radius: 99px; padding: 2px 9px 2px 3px; margin: 2px 4px 2px 0; font-size: 12px; cursor: pointer; background: var(--card); }
+.chip.on { border-color: var(--brand); background: var(--brand-soft); }
+.num { width: 20px; height: 20px; border-radius: 50%; color: #fff; display: inline-grid; place-items: center; font-size: 11px; font-weight: 700; flex-shrink: 0; }
+.panel { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 10px); }
+.flag { font-weight: 650; font-size: 12px; }
+.flag.likely { color: var(--ok); } .flag.unconfirmed { color: #ba7517; } .flag.unlikely { color: #d85a30; }
+.foot { text-align: center; color: var(--ink2); font-size: 12px; padding: 8px 0 0; }
+</style>
+
+<header class="bar">
+  <div class="logo" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0f6e56" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3 7 4-14 3 7h4"/></svg></div>
+  <div><h1>Cancer Care Navigator</h1><p>NCCN guidelines · emerging evidence · ClinicalTrials.gov · oncologist matching</p></div>
+  <span class="mode" id="mode">Connecting to Claude…</span>
+</header>
+
+<nav class="tabs" role="tablist" id="tabs">
+  <button class="tab" role="tab" data-step="1" aria-selected="true"><b>1</b> Insurance</button>
+  <button class="tab" role="tab" data-step="2"><b>2</b> Location</button>
+  <button class="tab" role="tab" data-step="3"><b>3</b> Disease status</button>
+  <button class="tab" role="tab" data-step="4"><b>4</b> Doctor's next steps</button>
+  <button class="tab" role="tab" data-step="5"><b>5</b> Care options</button>
+  <button class="tab" role="tab" data-step="6"><b>6</b> Oncologists</button>
+</nav>
+
+<main class="wrap">
+  <div id="availNote"></div>
+
+  <section id="s1">
+    <div class="card">
+      <h2>Insurance information</h2>
+      <p class="sub">Used to judge whether each oncologist or cancer center is likely to accept your coverage. No member ID needed.</p>
+      <div class="lbl">Primary insurance</div>
+      <div class="grid3">
+        <div class="fg"><label for="i1c">Insurance company</label><input id="i1c" list="carriers" placeholder="e.g., Blue Shield of California"></div>
+        <div class="fg"><label for="i1t">Plan type</label><select id="i1t"></select></div>
+        <div class="fg"><label for="i1n">Plan or network name</label><input id="i1n" placeholder="e.g., Trio HMO, PPO Gold"></div>
+      </div>
+      <div class="lbl">Secondary insurance (optional)</div>
+      <div class="grid3">
+        <div class="fg"><label for="i2c">Insurance company</label><input id="i2c" list="carriers" placeholder="e.g., Medicare"></div>
+        <div class="fg"><label for="i2t">Plan type</label><select id="i2t"></select></div>
+        <div class="fg"><label for="i2n">Plan or network name</label><input id="i2n" placeholder="e.g., Medigap Plan G"></div>
+      </div>
+      <datalist id="carriers"><option>Aetna</option><option>Anthem Blue Cross</option><option>Blue Cross Blue Shield</option><option>Blue Shield of California</option><option>Cigna</option><option>Health Net</option><option>Humana</option><option>Kaiser Permanente</option><option>Medicare</option><option>Medi-Cal</option><option>Medicaid</option><option>Molina Healthcare</option><option>Tricare</option><option>UnitedHealthcare</option></datalist>
+      <div class="nav"><span></span><button class="btn" data-go="2">Continue →</button></div>
+    </div>
+  </section>
+
+  <section id="s2" hidden>
+    <div class="card">
+      <h2>Where would you like to receive care?</h2>
+      <p class="sub">A home address, or just a city, ZIP code or state.</p>
+      <div class="grid2">
+        <div class="fg"><label for="loc">Address, city, ZIP or state</label><input id="loc" placeholder="e.g., Fremont, CA"></div>
+        <div class="fg"><label for="dist">How far will you travel?</label>
+          <select id="dist"><option value="25">Within 25 miles</option><option value="50" selected>Within 50 miles</option><option value="100">Within 100 miles</option><option value="250">Within 250 miles</option><option value="0">Any distance</option></select></div>
+      </div>
+      <div class="row" style="margin-bottom:10px"><button class="btn" id="locBtn">Show on map</button><span class="small" id="locStatus"></span></div>
+      <div class="mapbox" id="map1"></div>
+      <p class="small" style="margin-top:6px">Outline map. Locations are approximate (placed by Claude from the city or address).</p>
+      <div class="nav"><button class="btn ghost" data-go="1">← Back</button><button class="btn" data-go="3">Continue →</button></div>
+    </div>
+  </section>
+
+  <section id="s3" hidden>
+    <div class="card">
+      <h2>Current disease status</h2>
+      <p class="sub">Describe it in your own words. Claude will organize it.</p>
+      <div class="fg"><label for="dnarr">Your disease status</label>
+        <textarea id="dnarr" style="min-height:160px" placeholder="Diagnosis and stage · treatments so far and how they worked · biomarkers or mutations (ER, HER2, PIK3CA, EGFR, BRCA, PD-L1…) · current symptoms · other health conditions and side effects"></textarea></div>
+      <div class="row"><button class="btn" id="analyzeBtn">Organize my disease status</button><button class="btn ghost" id="exampleBtn">Load an example</button></div>
+      <div id="dout" style="margin-top:12px"></div>
+      <div class="nav"><button class="btn ghost" data-go="2">← Back</button><button class="btn" data-go="4">Continue →</button></div>
+    </div>
+  </section>
+
+  <section id="s4" hidden>
+    <div class="card">
+      <h2>Next steps your doctor recommended</h2>
+      <p class="sub">Optional. Tests, procedures or treatments, one per line. Leave blank and the app suggests next steps.</p>
+      <div class="fg"><label for="drecs">Doctor's recommendations</label><textarea id="drecs" placeholder="e.g.&#10;Liquid biopsy for ESR1 mutation&#10;Start fulvestrant + capivasertib"></textarea></div>
+      <div class="nav"><button class="btn ghost" data-go="3">← Back</button><button class="btn" id="optionsBtn">Find care options</button></div>
+    </div>
+  </section>
+
+  <section id="s5" hidden>
+    <div id="optProgress"></div>
+    <div id="optOut"></div>
+    <div class="nav"><button class="btn ghost" data-go="4">← Back</button><button class="btn" id="oncBtn" disabled>Find matching oncologists</button></div>
+  </section>
+
+  <section id="s6" hidden>
+    <div id="oncProgress"></div>
+    <div id="oncOut"></div>
+    <div class="nav"><button class="btn ghost" data-go="5">← Back to care options</button><span></span></div>
+  </section>
+
+  <p class="foot">For information and planning only. This is not medical advice. Review every option with your oncologist.</p>
+</main>
+
+<script>
+// ───────── setup ─────────
+const CT = "Clinical Trials";
+const PIN_COLORS = ["#185FA5","#7F77DD","#BA7517","#0F6E56","#D85A30","#639922","#A2427A","#2F6DB0","#5D7A1E","#8A5A00","#3C7D8C","#9C4A2F"];
+const PLAN_TYPES = ["", "HMO", "PPO", "EPO", "POS", "Medicare Advantage", "Original Medicare", "Medigap / Supplement", "Medicaid / Medi-Cal", "Employer self-funded", "Other / not sure"];
+const S = { place: null, disease: null, options: null, trials: [], details: {}, cityCoords: {}, oncs: [] };
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const safeUrl = u => /^https:\/\//i.test(String(u || "")) ? String(u) : "";
+const link = (u, label) => safeUrl(u) ? `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(label || u)}</a>` : esc(label || "");
+const radius = () => +$("dist").value || 0;
+function miles(a, b) {
+  const R = 3958.8, r = x => x * Math.PI / 180, dLat = r(b.lat - a.lat), dLng = r(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+for (const id of ["i1t", "i2t"]) $(id).innerHTML = PLAN_TYPES.map(p => `<option value="${p}">${p || "Select…"}</option>`).join("");
+
+let sample = null, mcp = null;
+(async () => {
+  if (window.claude?.use) [sample, mcp] = await Promise.all([claude.use("sample"), claude.use("mcp")]);
+  $("mode").textContent = sample ? "Running on your Claude account" : "Claude unavailable here";
+  if (!sample) $("availNote").innerHTML = `<div class="note warn">Claude isn't available in this view, so steps 3, 5 and 6 won't run. Open this page on claude.ai while signed in.</div>`;
+  else if (!mcp) $("availNote").innerHTML = `<div class="note warn">Connectors aren't available in this view, so live clinical trial search won't run.</div>`;
+})();
+
+// ───────── navigation ─────────
+function go(n) {
+  for (let i = 1; i <= 6; i++) $("s" + i).hidden = i !== n;
+  document.querySelectorAll(".tab").forEach(t => { const k = +t.dataset.step; t.setAttribute("aria-selected", k === n); if (k < n) t.classList.add("done"); });
+  window.scrollTo({ top: 0 });
+  if (n === 2 && S.place) drawMap($("map1"), [], { home: S.place });
+  if (n === 6 && S.oncs.length) renderOncMap();
+}
+document.addEventListener("click", e => { const b = e.target.closest("[data-go],[data-step]"); if (b) go(+(b.dataset.go || b.dataset.step)); });
+
+// ───────── error copy ─────────
+function sampleMsg(e) {
+  switch (e?.code) {
+    case "not_granted": case "sampling_disabled": case "not_declared": case "capability_disabled": case "capability_removed":
+      return "Claude isn't allowed for this page. Reload and choose Allow when asked to let it use Claude.";
+    case "rate_limited": return "You've reached a Claude usage limit for now. Try again in a little while.";
+    case "session_expired": return "Your claude.ai session expired. Sign in again, then retry.";
+    case "refused": return "Claude declined this request. Try rewording the description.";
+    case "invalid_json": case "empty_completion": return "Claude's answer couldn't be read. Click the button again.";
+    case "prompt_too_large": return "There was too much text to send. Shorten the description and try again.";
+    case "cancelled": return "Stopped.";
+    default: return "Claude didn't respond. Try again in a moment.";
+  }
+}
+function mcpMsg(e) {
+  switch (e?.code) {
+    case "server_not_connected": return "The Clinical Trials connector isn't connected. Add it in claude.ai Settings → Connectors, then try again.";
+    case "needs_reauth": return "Reconnect the Clinical Trials connector in claude.ai Settings → Connectors, then try again.";
+    case "selection_required": return "Choose which Clinical Trials connector to use when claude.ai asks, then try again.";
+    case "not_in_manifest": return "Clinical Trials search isn't allowed for this page. Choose Allow when asked, then try again.";
+    case "blocked_by_policy": case "approval_required": return "Your organization blocks this connector for this page.";
+    case "server_unavailable": return "ClinicalTrials.gov didn't respond. Try again in a minute.";
+    case "tool_error": return "ClinicalTrials.gov reported an error: " + (e.message || "");
+    case "not_granted": case "capability_disabled": case "capability_removed": return "Connectors aren't available in this view.";
+    default: return "The trial search failed. Try again.";
+  }
+}
+async function ctTool(tool, input) {
+  if (!mcp) throw { code: "not_granted", src: "mcp" };
+  try {
+    return (await mcp.callTool(CT, tool, input)).payload;
+  } catch (e) {
+    if (!e?.retryable) throw { ...e, src: "mcp" };
+    // one retry for a transient read failure, after the suggested wait
+    await new Promise(res => setTimeout(res, (e.retryAfterMs || 1500) + Math.random() * 800));
+    try { return (await mcp.callTool(CT, tool, input)).payload; } catch (e2) { throw { ...e2, src: "mcp" }; }
+  }
+}
+async function ask(prompt, tier = "default") {
+  if (!sample) throw { code: "not_granted" };
+  return sample.json(prompt, { modelTier: tier });
+}
+
+// ───────── map (outline, d3 + us-atlas counties) ─────────
+let topo = null;
+async function loadTopo() {
+  if (!topo) topo = await fetch("us-counties.json").then(r => r.json());
+  return topo;
+}
+async function drawMap(box, pins, { home, onPin, active } = {}) {
+  const t = await loadTopo();
+  const w = box.clientWidth || 600, h = box.clientHeight || 450;
+  const pts = [...(home ? [[home.lng, home.lat]] : []), ...pins.filter(p => p.lat != null).map(p => [p.lng, p.lat])];
+  const r = radius();
+  const fitTo = { type: "FeatureCollection", features: [] };
+  if (home) fitTo.features.push(d3.geoCircle().center([home.lng, home.lat]).radius((r || 40) / 69.05)());
+  if (pts.length) fitTo.features.push({ type: "Feature", geometry: { type: "MultiPoint", coordinates: pts } });
+  if (!fitTo.features.length) fitTo.features.push(topojson.feature(t, t.objects.nation));
+  const proj = d3.geoMercator().fitExtent([[30, 60], [w - 30, h - 24]], fitTo);
+  const path = d3.geoPath(proj);
+  box.innerHTML = "";
+  const svg = d3.select(box).append("svg").attr("viewBox", `0 0 ${w} ${h}`).attr("role", "img").attr("aria-label", "Map of your location and matched care sites");
+  svg.append("path").datum(topojson.feature(t, t.objects.nation)).attr("d", path).attr("fill", "var(--land)");
+  svg.append("path").datum(topojson.mesh(t, t.objects.counties, (a, b) => a !== b)).attr("d", path).attr("fill", "none").attr("stroke", "var(--county)").attr("stroke-width", .6);
+  svg.append("path").datum(topojson.mesh(t, t.objects.states, (a, b) => a !== b)).attr("d", path).attr("fill", "none").attr("stroke", "var(--state)").attr("stroke-width", 1.2);
+  if (home && r) svg.append("path").datum(d3.geoCircle().center([home.lng, home.lat]).radius(r / 69.05)()).attr("d", path).attr("fill", "#1d9e75").attr("fill-opacity", .07).attr("stroke", "#1d9e75").attr("stroke-dasharray", "4 3");
+  const pinG = svg.append("g");
+  const drawPin = (x, y, color, label, on) => {
+    const g = pinG.append("g").attr("transform", `translate(${x},${y})`).style("cursor", "pointer");
+    g.append("path").attr("d", "M0,0 C-3,-8 -11,-12 -11,-20 A11,11 0 1,1 11,-20 C11,-12 3,-8 0,0Z").attr("fill", color).attr("stroke", on ? "#FFD54A" : "#fff").attr("stroke-width", on ? 3 : 2);
+    g.append("text").attr("y", -16).attr("text-anchor", "middle").attr("fill", "#fff").attr("font-size", 11).attr("font-weight", 700).text(label);
+    return g;
+  };
+  if (home) { const [x, y] = proj([home.lng, home.lat]); drawPin(x, y, "#1d9e75", "★").append("title").text("Your location: " + home.label); }
+  for (const p of pins) {
+    if (p.lat == null) continue;
+    const [x, y] = proj([p.lng, p.lat]);
+    p._xy = [x, y];
+    const g = drawPin(x, y, p.color, p.n, p.n === active);
+    if (onPin) { g.on("mouseenter", () => onPin(p.n, true)).on("click", () => onPin(p.n, true)); }
+  }
+}
+
+// ───────── Step 1.2 location ─────────
+async function locate() {
+  const q = $("loc").value.trim();
+  if (!q) { $("locStatus").textContent = "Enter an address, city, ZIP code or state."; return null; }
+  $("locStatus").textContent = "Finding " + q + "…";
+  try {
+    const g = await ask(`Give the approximate geographic coordinates of this US location: "${q.slice(0, 200)}". Reply with only JSON like {"lat":37.55,"lng":-121.99,"label":"Fremont, CA","state":"California","precision":"city"} where precision is "address", "city", "zip" or "state". If it is not a real US place, reply {"error":"not found"}.`, "quick");
+    if (!g || g.error || typeof g.lat !== "number") { $("locStatus").textContent = "Couldn't find that place. Try adding the city and state."; return null; }
+    S.place = { lat: g.lat, lng: g.lng, label: String(g.label || q), state: String(g.state || ""), query: q };
+    $("locStatus").textContent = "✓ " + S.place.label + " (approximate)";
+    drawMap($("map1"), [], { home: S.place });
+    return S.place;
+  } catch (e) { $("locStatus").textContent = sampleMsg(e); return null; }
+}
+$("locBtn").onclick = locate;
+$("loc").addEventListener("keydown", e => { if (e.key === "Enter") locate(); });
+$("dist").onchange = () => { if (S.place) drawMap($("map1"), [], { home: S.place }); };
+
+// ───────── Step 1.3 disease status ─────────
+const EXAMPLE = `I was diagnosed with ER-positive, PR-positive, HER2-negative invasive ductal breast cancer in 2019 (Stage IIA) and had a lumpectomy, radiation and 5 years of letrozole planned.
+In March 2025 a scan showed it had spread to my bones (spine and pelvis) and liver. Biopsy of the liver confirmed ER+/HER2-low (IHC 1+). Genomic testing found a PIK3CA mutation (H1047R).
+I started palbociclib plus fulvestrant in April 2025. My latest scan in August 2026 shows the liver spots are growing again.
+Symptoms: lower back pain, mild fatigue. Side effects: low white counts on palbociclib. Other conditions: type 2 diabetes (controlled with metformin), osteopenia. I'm still working part-time.`;
+$("exampleBtn").onclick = () => { $("dnarr").value = EXAMPLE; };
+const DISEASE_SHAPE = `{"diagnosis":"","cancer_type":"","histology":"","stage":"","diagnosed":"","metastatic_sites":[""],"biomarkers":[{"name":"","result":""}],"prior_treatments":[{"treatment":"","type":"","when":"","outcome":""}],"current_status":"","symptoms":[""],"comorbidities":[""],"side_effects":[""],"performance_status":"","summary":"2-3 plain-language sentences","missing_info":[""],"search":{"condition":"standard cancer name for a ClinicalTrials.gov search, e.g. Breast Cancer","keywords":["2-4 short biomarker or setting terms useful for finding trials"]}}`;
+async function organize() {
+  const narr = $("dnarr").value.trim();
+  if (!narr) { $("dout").innerHTML = `<div class="note warn">Describe your disease status first.</div>`; return false; }
+  const btn = $("analyzeBtn"); btn.disabled = true; btn.textContent = "Thinking…";
+  try {
+    S.disease = await ask(`You are an oncology nurse navigator. Organize this patient's own description of their cancer into structured fields in plain language. Use only what the patient wrote; never invent results; use "" or [] when something wasn't mentioned. In missing_info list details an oncologist would want that the patient didn't mention.\nReply with only JSON in this shape:\n${DISEASE_SHAPE}\n\nPATIENT'S DESCRIPTION:\n${narr.slice(0, 8000)}`);
+    $("dout").innerHTML = renderDisease(S.disease);
+    return true;
+  } catch (e) { $("dout").innerHTML = `<div class="note err">${esc(sampleMsg(e))}</div>`; return false; }
+  finally { btn.disabled = false; btn.textContent = "Organize again"; }
+}
+$("analyzeBtn").onclick = organize;
+const list = a => a?.filter(Boolean).length ? `<ul>${a.filter(Boolean).map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : `<span class="small">None mentioned</span>`;
+function renderDisease(d) {
+  return `<div class="note ok"><b>Summary.</b> ${esc(d.summary)}</div>
+  <div class="sgrid">
+    <div class="si"><strong>Diagnosis</strong>${esc(d.diagnosis || "—")}<div class="small">${esc(d.histology || "")}</div></div>
+    <div class="si"><strong>Stage</strong>${esc(d.stage || "—")}<div class="small">${d.diagnosed ? "Diagnosed " + esc(d.diagnosed) : ""}</div></div>
+    <div class="si"><strong>Where it has spread</strong>${list(d.metastatic_sites)}</div>
+    <div class="si"><strong>Biomarkers and mutations</strong>${(d.biomarkers || []).filter(b => b?.name).map(b => `<span class="tag t-Emerging">${esc(b.name)}: ${esc(b.result)}</span>`).join("") || `<span class="small">None mentioned</span>`}</div>
+    <div class="si" style="grid-column:1/-1"><strong>Treatment history</strong>${(d.prior_treatments || []).filter(t => t?.treatment).length ? `<div class="tbl-wrap"><table style="min-width:0"><thead><tr><th>Treatment</th><th>Type</th><th>When</th><th>Outcome</th></tr></thead><tbody>${d.prior_treatments.filter(t => t?.treatment).map(t => `<tr><td>${esc(t.treatment)}</td><td>${esc(t.type)}</td><td>${esc(t.when)}</td><td>${esc(t.outcome)}</td></tr>`).join("")}</tbody></table></div>` : `<span class="small">None mentioned</span>`}</div>
+    <div class="si"><strong>Current status</strong>${esc(d.current_status || "—")}</div>
+    <div class="si"><strong>Activity level</strong>${esc(d.performance_status || "—")}</div>
+    <div class="si"><strong>Symptoms</strong>${list(d.symptoms)}</div>
+    <div class="si"><strong>Side effects</strong>${list(d.side_effects)}</div>
+    <div class="si"><strong>Other conditions</strong>${list(d.comorbidities)}</div>
+    <div class="si"><strong>Worth adding or asking your doctor</strong>${list(d.missing_info)}</div>
+  </div>`;
+}
+
+// ───────── progress list ─────────
+function progress(el, steps) {
+  el.innerHTML = `<div class="card"><ul class="steps">${steps.map((s, i) => `<li id="${el.id}-${i}"><span class="dot"></span><span>${esc(s)}</span><span class="small"></span></li>`).join("")}</ul></div>`;
+  const li = i => $(`${el.id}-${i}`);
+  const set = (i, cls, note) => { li(i).querySelector(".dot").className = "dot " + cls; if (note != null) li(i).lastElementChild.textContent = note; };
+  return { start: i => set(i, "run"), done: (i, n = "") => set(i, "ok", n), fail: (i, n = "") => set(i, "bad", n) };
+}
+
+// ───────── trials via the Clinical Trials connector ─────────
+const fmtPhase = p => (p || []).join("/").replace(/EARLY_PHASE1/g, "Early Phase 1").replace(/PHASE/g, "Phase ") || "N/A";
+const GENERIC_CONTACT = /public contact|coordinator|clinical trials? (office|unit|information|navigator)|research (office|team|nurse)|^site\b|^call |^info|^contact|study team|recruitment/i;
+async function findTrials(d) {
+  const cond = d.search?.condition || d.cancer_type || d.diagnosis;
+  const kws = (d.search?.keywords || []).filter(Boolean).slice(0, 4).map(k => /\s/.test(k) ? `"${k.replace(/"/g, "")}"` : k.replace(/[()"]/g, ""));
+  const loc = S.place?.state || S.place?.label || undefined;
+  const base = { condition: cond, status: ["RECRUITING"], study_type: "INTERVENTIONAL", page_size: 40 };
+  const tries = [
+    { ...base, location: loc, advanced_query: kws.length ? `AREA[BasicSearch](${kws.join(" OR ")})` : undefined },
+    { ...base, location: loc },
+    { ...base, advanced_query: kws.length ? `AREA[BasicSearch](${kws.join(" OR ")})` : undefined },
+  ];
+  let items = [];
+  for (const t of tries) {
+    const p = await ctTool("search_trials", JSON.parse(JSON.stringify(t)));
+    items = p?.items || [];
+    if (items.length >= 5) break;
+  }
+  return items;
+}
+function rankTrials(items, d) {
+  const kws = (d.search?.keywords || []).map(k => k.toLowerCase());
+  return items.map(t => {
+    const text = `${t.title} ${(t.conditions || []).join(" ")} ${(t.interventions || []).join(" ")}`.toLowerCase();
+    const hits = kws.filter(k => text.includes(k)).length;
+    const ph = (t.phase || []).join(" ");
+    return { t, score: hits * 3 + (/PHASE3/.test(ph) ? 3 : /PHASE2/.test(ph) ? 2 : 1) };
+  }).sort((a, b) => b.score - a.score).map(x => x.t);
+}
+async function fetchDetails(ids) {
+  for (const id of ids) {
+    if (S.details[id]) continue;
+    try { const p = await ctTool("get_trial_details", { nct_id: id }); if (p?.found) S.details[id] = p.trial; } catch (e) { /* skip one trial */ }
+  }
+}
+// Approximate coordinates for trial-site cities (Claude, quick tier) so distances can be shown.
+async function locateCities(cities) {
+  const need = [...new Set(cities)].filter(c => !(c in S.cityCoords)).slice(0, 60);
+  if (!need.length) return;
+  try {
+    const m = await ask(`Approximate coordinates of these US cities. Reply with only a JSON object that maps each input string exactly as given to [lat, lng]. Use null if unknown.\n${JSON.stringify(need)}`, "quick");
+    for (const c of need) { const v = m?.[c]; S.cityCoords[c] = Array.isArray(v) && typeof v[0] === "number" ? { lat: v[0], lng: v[1] } : null; }
+  } catch (e) { for (const c of need) S.cityCoords[c] = null; }
+}
+const cityKey = l => `${l.city}, ${l.state}`;
+function sitesFor(trial) {
+  const locs = (trial?.locations || []).filter(l => l.country === "United States" && l.city);
+  return locs.map(l => { const c = S.cityCoords[cityKey(l)]; return { ...l, lat: c?.lat, lng: c?.lng, mi: c && S.place ? miles(S.place, c) : null }; })
+    .sort((a, b) => (a.mi ?? 1e9) - (b.mi ?? 1e9));
+}
+
+// ───────── Step 2.1 care options ─────────
+const OPTIONS_SHAPE = `{"options":[{"id":"O1","option":"short name of treatment, test or procedure","kind":"treatment|test|procedure|supportive care","sources":["NCCN","Emerging","Trial","Doctor"],"rationale":"1-3 plain sentences","nccn_reference":"guideline name, version and category as you know it, or \\"\\"","evidence":["short citation, e.g. trial name + journal + year"],"nct_id":"","priority":"high|medium|low","fit_notes":"what to confirm first"}],"top_trials":[{"nct_id":"","why_match":"","eligibility_concerns":""}],"questions_for_doctor":[""]}`;
+$("optionsBtn").onclick = runOptions;
+async function runOptions() {
+  go(5); $("optOut").innerHTML = ""; $("oncBtn").disabled = true;
+  if (!$("dnarr").value.trim()) { $("optProgress").innerHTML = `<div class="note warn">Add your disease status in step 3 first.</div>`; return; }
+  const P = progress($("optProgress"), ["Organize disease status", "Place your location", "Search recruiting trials (Clinical Trials connector)", "Read eligibility and sites for the best candidates", "Review NCCN guidelines and emerging evidence with Claude (about 1–2 minutes)"]);
+  try {
+    P.start(0);
+    if (!S.disease && !(await organize())) { P.fail(0, "see step 3"); return; }
+    P.done(0, S.disease.diagnosis);
+    P.start(1);
+    if (!S.place && $("loc").value.trim()) await locate();
+    S.place ? P.done(1, S.place.label) : P.fail(1, "no location; trials won't be filtered by distance");
+    P.start(2);
+    let items = [];
+    try { items = await findTrials(S.disease); P.done(2, `${items.length} recruiting trials`); }
+    catch (e) { P.fail(2, mcpMsg(e)); }
+    P.start(3);
+    const top = rankTrials(items, S.disease).slice(0, 10);
+    await fetchDetails(top.map(t => t.nct_id));
+    const nearCities = Object.values(S.details).flatMap(t => (t.locations || []).filter(l => l.country === "United States" && (!S.place?.state || l.state === S.place.state)).map(cityKey));
+    await locateCities(nearCities);
+    S.trials = top.filter(t => S.details[t.nct_id]).map(t => ({ ...t, detail: S.details[t.nct_id], sites: sitesFor(S.details[t.nct_id]) }));
+    S.trials.length ? P.done(3, `${S.trials.length} trials checked`) : P.fail(3, "no trial details");
+    P.start(4);
+    const brief = S.trials.map(t => ({ nct: t.nct_id, title: t.title, phase: fmtPhase(t.phase), sponsor: t.sponsor, interventions: t.interventions, eligibility: (t.detail.eligibility_criteria || "").slice(0, 1400), nearest_sites: t.sites.slice(0, 3).map(s => `${s.facility}, ${s.city} ${s.state}${s.mi != null ? ` (~${Math.round(s.mi)} mi)` : ""}`) }));
+    const prompt = `You are an oncology care-navigation assistant helping a patient prepare to talk with their oncologist. You cannot browse the web: use your own knowledge of NCCN guidelines and of recent evidence (including ASCO and ESMO presentations you know of), and the live clinical-trial data below. Be honest about uncertainty.
+
+Produce next-step options (treatments, tests, procedures):
+1. NCCN: standard-of-care options that fit this disease status. Name the guideline and, if you know it, the version and category.
+2. Emerging: recent evidence (approvals, ASCO/ESMO data) relevant to this patient. Cite as short text, e.g. "DESTINY-Breast06, NEJM 2024". No URLs.
+3. Trial: choose the TOP THREE trials ONLY from the candidates below (never invent NCT numbers). Prefer good eligibility fit and a nearby site.
+4. Doctor: include every doctor-recommended item as an option with source "Doctor"; if NCCN or emerging evidence also supports it, add those sources to the same option.
+Never present an option as a decision. Number ids O1, O2, …
+
+Reply with only JSON in this shape:
+${OPTIONS_SHAPE}
+
+DISEASE STATUS: ${JSON.stringify(S.disease)}
+DOCTOR-RECOMMENDED NEXT STEPS: ${$("drecs").value.trim() || "(none — suggest next steps)"}
+LOCATION: ${S.place?.label || "not given"}; travel limit ${radius() ? radius() + " miles" : "any distance"}
+RECRUITING TRIAL CANDIDATES: ${JSON.stringify(brief)}`;
+    const data = await ask(prompt, "complex");
+    if (!Array.isArray(data?.options)) throw { code: "invalid_json" };
+    S.options = data;
+    P.done(4, `${data.options.length} options`);
+    $("optOut").innerHTML = renderOptions(data);
+    $("oncBtn").disabled = !data.options.length;
+  } catch (e) {
+    $("optOut").innerHTML = `<div class="note err">${esc(e?.src === "mcp" ? mcpMsg(e) : sampleMsg(e))}</div>`;
+  }
+}
+const SRC_LABEL = { NCCN: "NCCN guideline", Emerging: "Emerging evidence", Trial: "Clinical trial", Doctor: "Your doctor" };
+const srcTags = s => (s || []).map(x => `<span class="tag t-${esc(x)}">${esc(SRC_LABEL[x] || x)}</span>`).join("");
+const pubmedSearch = q => "https://pubmed.ncbi.nlm.nih.gov/?term=" + encodeURIComponent(q);
+function renderOptions(d) {
+  const opts = d.options || [];
+  const trials = (d.top_trials || []).map(t => ({ ...t, data: S.trials.find(x => x.nct_id === t.nct_id) })).filter(t => t.data);
+  return `<div class="note info">NCCN and emerging-evidence items come from Claude's own knowledge (no live web check in this version). Use the reference links to confirm, and review everything with your oncologist.</div>
+  <div class="card"><h2>Recommended next steps</h2><p class="sub">Each option shows where the recommendation comes from.</p>
+    <div class="tbl-wrap"><table><thead><tr><th style="width:28%">Option</th><th style="width:16%">Source</th><th style="width:8%">Priority</th><th>Why it may fit · what to confirm</th><th style="width:20%">References</th></tr></thead><tbody>
+    ${opts.map(o => `<tr><td><b>${esc(o.option)}</b><div class="small">${esc(o.kind || "")}${o.nct_id ? ` · ${link("https://clinicaltrials.gov/study/" + o.nct_id, o.nct_id)}` : ""}</div></td>
+      <td>${srcTags(o.sources)}</td><td><span class="tag t-${esc(o.priority)}">${esc(o.priority || "")}</span></td>
+      <td>${esc(o.rationale)}${o.fit_notes ? `<div class="small"><b>Confirm:</b> ${esc(o.fit_notes)}</div>` : ""}${o.nccn_reference ? `<div class="small"><b>NCCN:</b> ${esc(o.nccn_reference)}</div>` : ""}</td>
+      <td>${(o.evidence || []).filter(Boolean).map(ev => `<div>${link(pubmedSearch(String(ev)), String(ev))}</div>`).join("")}</td></tr>`).join("")}
+    </tbody></table></div></div>
+  <div class="card"><h2>Top 3 matching clinical trials</h2><p class="sub">Recruiting now · from the Clinical Trials connector (ClinicalTrials.gov)</p>
+    ${trials.length ? trials.map(t => { const s = t.data.sites[0]; return `<div class="trial">
+      <div class="row" style="justify-content:space-between"><b>${esc(t.data.title)}</b><span class="tag t-Trial">${esc(fmtPhase(t.data.phase))}</span></div>
+      <div class="small">${esc(t.data.sponsor || "")} · ${t.data.locations_count ?? "?"} sites · ${link("https://clinicaltrials.gov/study/" + t.nct_id, t.nct_id)}</div>
+      <div style="margin-top:6px"><b>Why it may match:</b> ${esc(t.why_match)}</div>
+      ${t.eligibility_concerns ? `<div class="small"><b>Check eligibility:</b> ${esc(t.eligibility_concerns)}</div>` : ""}
+      ${s ? `<div class="small">Nearest US site: ${esc(s.facility)}, ${esc(s.city)} ${esc(s.state)}${s.mi != null ? ` (~${Math.round(s.mi)} mi)` : ""}</div>` : ""}</div>`; }).join("")
+      : `<div class="note warn">No recruiting trial matched well. Ask your oncologist about trials at nearby cancer centers.</div>`}
+  </div>
+  ${(d.questions_for_doctor || []).filter(Boolean).length ? `<div class="card"><h2>Questions to ask your oncologist</h2>${list(d.questions_for_doctor)}</div>` : ""}`;
+}
+
+// ───────── Step 2.2 oncologists ─────────
+function personName(full) {
+  const parts = String(full || "").replace(/^Dr\.?\s+/i, "").replace(/,.*$/, "").replace(/\b[A-Z]\.\s*/g, "").trim().split(/\s+/).filter(Boolean);
+  return parts.length < 2 ? null : { first: parts[0].replace(/[^A-Za-z'-]/g, ""), last: parts[parts.length - 1].replace(/[^A-Za-z'-]/g, "") };
+}
+function candidatesFromTrials(opts) {
+  const r = radius(), byKey = new Map();
+  for (const o of opts.filter(o => o.nct_id)) {
+    const t = S.trials.find(x => x.nct_id === o.nct_id);
+    if (!t) continue;
+    for (const s of t.sites.slice(0, 8)) {
+      if (r && (s.mi == null || s.mi > r)) continue;
+      const names = (s.contacts || []).filter(n => n && !GENERIC_CONTACT.test(n));
+      const docs = names.filter(n => /\b(MD|M\.D\.|DO|PhD)\b/.test(n));
+      const people = (docs.length ? docs : names).slice(0, 2);
+      for (const pi of (people.length ? people : [null])) {
+        const key = (pi || "team") + "|" + s.facility;
+        const e = byKey.get(key) || { name: pi || `Trial team at ${s.facility}`, is_team: !pi, institution: s.facility, address: [s.facility, s.city, s.state, s.zip].filter(Boolean).join(", "), lat: s.lat, lng: s.lng, miles: s.mi, option_ids: [], trials: [], source: "trial" };
+        if (!e.option_ids.includes(o.id)) e.option_ids.push(o.id);
+        if (!e.trials.includes(t.nct_id)) e.trials.push(t.nct_id);
+        byKey.set(key, e);
+      }
+    }
+  }
+  return [...byKey.values()].sort((a, b) => (a.miles ?? 1e9) - (b.miles ?? 1e9)).slice(0, 10);
+}
+$("oncBtn").onclick = runOncologists;
+async function runOncologists() {
+  go(6); $("oncOut").innerHTML = "";
+  const P = progress($("oncProgress"), ["Collect investigators and site teams near you from your trials", "Assess who can provide each option, and insurance, with Claude (about 1 minute)", "Check recruiting trials each oncologist leads", "Map locations and distances"]);
+  try {
+    const opts = S.options.options || [];
+    P.start(0);
+    const cands = candidatesFromTrials(opts);
+    cands.forEach((c, i) => c.cid = "C" + (i + 1));
+    P.done(0, `${cands.length} found`);
+    P.start(1);
+    const ins = [[$("i1c").value, $("i1t").value, $("i1n").value], [$("i2c").value, $("i2t").value, $("i2n").value]].map(a => a.filter(Boolean).join(" · ") || "none");
+    const prompt = `You are an oncology care-navigation assistant. You cannot browse the web; rely on your knowledge and be cautious.
+Patient: ${S.disease.summary}
+Location: ${S.place?.label || "not given"} (approx lat ${S.place?.lat}, lng ${S.place?.lng}); travel limit ${radius() ? radius() + " miles" : "any distance"}.
+Insurance: primary ${ins[0]}; secondary ${ins[1]}.
+Options: ${JSON.stringify(opts.map(o => ({ id: o.id, option: o.option, sources: o.sources, nct_id: o.nct_id })))}
+Candidates (real, from ClinicalTrials.gov site listings): ${JSON.stringify(cands.map(c => ({ id: c.cid, name: c.name, is_team: c.is_team, institution: c.institution, address: c.address, runs_trials: c.trials, linked_options: c.option_ids })))}
+
+Tasks:
+1. For each candidate, list the option ids they can likely provide. Trial options only where they run that trial. Non-trial options (standard treatments, tests) only if the institution is a cancer center that plausibly offers them. Give a cautious role (e.g. "Site investigator; likely medical oncologist") and a one-line reason.
+2. Insurance: "likely" only when you have good reason (e.g. academic centers that are known to take Medicare when the patient has Medicare); "unlikely" when you know the network excludes it (e.g. Kaiser HMO members generally need Kaiser facilities); otherwise "unconfirmed". Add a short note.
+3. Add up to 4 well-known cancer centers near the patient, within the travel limit, that could provide the non-trial options. Only include institutions you are confident exist; give city, state and approximate coordinates. Never invent individual doctors.
+
+Reply with only JSON:
+{"assessments":[{"id":"C1","option_ids":["O1"],"role":"","why":"","insurance":{"status":"likely|unconfirmed|unlikely","note":""}}],"centers":[{"name":"","city":"","state":"","lat":0,"lng":0,"option_ids":["O1"],"why":"","insurance":{"status":"likely|unconfirmed|unlikely","note":""}}]}`;
+    const a = await ask(prompt, "complex");
+    const byId = Object.fromEntries((a?.assessments || []).map(x => [x.id, x]));
+    let oncs = cands.map(c => { const x = byId[c.cid] || {}; return { ...c, option_ids: [...new Set([...(c.option_ids || []), ...(x.option_ids || [])])].filter(id => opts.some(o => o.id === id)), role: x.role || (c.is_team ? "Clinical trial site" : "Clinical trial site investigator"), why: x.why || "", insurance: x.insurance || { status: "unconfirmed" } }; });
+    for (const cen of (a?.centers || []).slice(0, 4)) {
+      if (!cen?.name || typeof cen.lat !== "number") continue;
+      const mi = S.place ? miles(S.place, cen) : null;
+      if (radius() && mi != null && mi > radius() * 1.15) continue;
+      oncs.push({ name: `${cen.name} oncology team`, is_team: true, institution: cen.name, address: [cen.city, cen.state].filter(Boolean).join(", "), lat: cen.lat, lng: cen.lng, miles: mi, option_ids: (cen.option_ids || []).filter(id => opts.some(o => o.id === id)), trials: [], role: "Cancer center suggested by Claude (verify)", why: cen.why || "", insurance: cen.insurance || { status: "unconfirmed" }, source: "claude" });
+    }
+    oncs = oncs.filter(o => o.option_ids.length);
+    P.done(1, `${oncs.length} matched`);
+    P.start(2);
+    for (const o of oncs.filter(o => !o.is_team).slice(0, 8)) {
+      const nm = personName(o.name);
+      if (!nm) continue;
+      try { const p = await ctTool("search_trials", { advanced_query: `AREA[OverallOfficialName](${nm.first} AND ${nm.last}) OR AREA[LocationContactName](${nm.first} AND ${nm.last})`, status: ["RECRUITING"], page_size: 5 }); o.trialsLed = (p?.items || []).map(t => ({ nct: t.nct_id, title: t.title })); }
+      catch (e) { o.trialsLed = null; }
+    }
+    P.done(2);
+    P.start(3);
+    oncs.sort((x, y) => (x.miles ?? 1e9) - (y.miles ?? 1e9));
+    oncs.forEach((o, i) => { o.n = i + 1; o.color = PIN_COLORS[i % PIN_COLORS.length]; });
+    S.oncs = oncs;
+    P.done(3, `${oncs.filter(o => o.lat != null).length} of ${oncs.length} placed`);
+    renderOncologists();
+  } catch (e) {
+    $("oncOut").innerHTML = `<div class="note err">${esc(e?.src === "mcp" ? mcpMsg(e) : sampleMsg(e))}</div>`;
+  }
+}
+const INS = { likely: ["likely", "✓ Likely accepts your insurance"], unlikely: ["unlikely", "✗ May not accept your insurance"], unconfirmed: ["unconfirmed", "⚠ Insurance not confirmed"] };
+const insFlag = o => { const [c, t] = INS[o.insurance?.status] || INS.unconfirmed; return `<span class="flag ${c}">${t}</span>`; };
+const dist = o => o.miles == null ? "Distance unknown" : `~${Math.round(o.miles)} mi from you`;
+function renderOncologists() {
+  const opts = S.options.options || [], oncs = S.oncs;
+  const flagged = oncs.filter(o => o.insurance?.status !== "likely").length;
+  $("oncOut").innerHTML = `
+  <div class="note ok">${oncs.length} oncologists or teams can provide at least one of your options.${flagged ? ` <b>${flagged}</b> are flagged because insurance acceptance isn't confirmed. Call before booking.` : ""}</div>
+  <div class="card"><h2>Treatment options and matched oncologists</h2><p class="sub">Hover a number, or a pin on the map, to link them.</p>
+    <div class="tbl-wrap"><table id="matchTbl"><thead><tr><th style="width:34%">Option</th><th style="width:18%">Source</th><th>Matched oncologists or teams</th></tr></thead><tbody>
+    ${opts.map(o => { const m = oncs.filter(x => x.option_ids.includes(o.id)); return `<tr data-opt="${esc(o.id)}"><td><b>${esc(o.option)}</b></td><td>${srcTags(o.sources)}</td><td>${m.length ? m.map(x => `<span class="chip" data-onc="${x.n}"><span class="num" style="background:${x.color}">${x.n}</span>${esc(x.name)}${x.insurance?.status !== "likely" ? " ⚠" : ""}</span>`).join("") : `<span class="small">No match found nearby</span>`}</td></tr>`; }).join("")}
+    </tbody></table></div></div>
+  <div class="split">
+    <div class="card" style="margin:0"><h2>Map</h2><p class="sub">★ your location · numbers match the table · locations approximate</p><div class="mapbox" id="map2"></div></div>
+    <div class="card panel" id="oncPanel"></div>
+  </div>`;
+  document.querySelectorAll("#matchTbl .chip").forEach(c => { c.addEventListener("mouseenter", () => activate(+c.dataset.onc)); c.addEventListener("click", () => activate(+c.dataset.onc)); });
+  renderOncMap();
+  if (oncs.length) activate(oncs[0].n); else $("oncPanel").innerHTML = `<p class="small">No oncologists matched. Try a larger travel distance in step 2.</p>`;
+}
+let activeN = null;
+async function renderOncMap() { await drawMap($("map2"), S.oncs, { home: S.place, onPin: activate, active: activeN }); showPop(); }
+function showPop() {
+  const box = $("map2"); if (!box) return;
+  box.querySelector(".pop")?.remove();
+  const o = S.oncs.find(x => x.n === activeN);
+  if (!o?._xy) return;
+  const svg = box.querySelector("svg"), vb = svg.viewBox.baseVal, k = box.clientWidth / vb.width;
+  const opts = (S.options.options || []).filter(x => o.option_ids.includes(x.id));
+  const pop = document.createElement("div");
+  pop.className = "pop";
+  // keep the popup inside the map: clamp horizontally, and open below the pin when it sits near the top
+  const x = o._xy[0] * k, y = o._xy[1] * k, half = Math.min(120, box.clientWidth / 2 - 8);
+  pop.style.left = Math.max(half + 6, Math.min(box.clientWidth - half - 6, x)) + "px";
+  pop.style.top = y + "px";
+  if (y < 150) pop.style.transform = "translate(-50%, 10px)";
+  pop.innerHTML = `<b>${o.n}. ${esc(o.name)}</b><br>${esc(o.institution)}<br><span class="small">${esc(dist(o))}</span><br><b>Can provide:</b> ${opts.map(x => esc(x.option)).join("; ")}<br>${link(webUrl(o), o.is_team ? "Find this center's webpage ↗" : "Find this oncologist's webpage ↗")}`;
+  box.appendChild(pop);
+}
+const webUrl = o => "https://www.google.com/search?q=" + encodeURIComponent(`${o.is_team ? "" : o.name.replace(/,.*$/, "")} ${o.institution} ${o.address.split(",").slice(-2).join(" ")} oncology`.trim());
+async function activate(n, fromMap) {
+  const o = S.oncs.find(x => x.n === n);
+  if (!o) return;
+  const changed = activeN !== n;
+  activeN = n;
+  document.querySelectorAll("#matchTbl tr[data-opt]").forEach(tr => tr.classList.toggle("hl", o.option_ids.includes(tr.dataset.opt)));
+  document.querySelectorAll("#matchTbl .chip").forEach(c => c.classList.toggle("on", +c.dataset.onc === n));
+  if (changed) await renderOncMap();
+  const opts = (S.options.options || []).filter(x => o.option_ids.includes(x.id));
+  const nm = personName(o.name);
+  const cancer = S.disease.search?.condition || S.disease.cancer_type || "cancer";
+  $("oncPanel").innerHTML = `
+    <div class="row" style="flex-wrap:nowrap;align-items:flex-start"><span class="num" style="background:${o.color};width:28px;height:28px;font-size:13px">${o.n}</span>
+      <div style="min-width:0"><div style="font-weight:700;font-size:15px">${esc(o.name)}</div><div class="small">${esc(o.institution)}</div></div></div>
+    <div style="margin:8px 0">${insFlag(o)}${o.insurance?.note ? `<div class="small">${esc(o.insurance.note)}</div>` : ""}</div>
+    <div class="sgrid" style="margin-bottom:8px">
+      <div class="si"><strong>Specialty</strong>${esc(o.role)}</div>
+      <div class="si"><strong>Experience</strong><span class="small">Not available without a web check. See their webpage.</span></div>
+      <div class="si"><strong>Distance</strong>${esc(dist(o))}</div>
+      <div class="si"><strong>Location</strong>${esc(o.address)}</div>
+    </div>
+    <div class="lbl">Can provide</div>
+    ${opts.map(x => `<div>• ${esc(x.option)} ${srcTags(x.sources)}</div>`).join("")}
+    ${o.why ? `<div class="small" style="margin-top:4px">${esc(o.why)}</div>` : ""}
+    <div class="lbl" style="margin-top:12px">Research activity</div>
+    ${o.trials.length ? `<div class="small" style="color:var(--ink)"><b>Runs your matched trial${o.trials.length > 1 ? "s" : ""}:</b> ${o.trials.map(id => link("https://clinicaltrials.gov/study/" + id, id)).join(", ")}</div>` : ""}
+    ${o.trialsLed?.length ? `<div class="small" style="color:var(--ink)"><b>Recruiting trials under this name:</b> ${o.trialsLed.map(t => link("https://clinicaltrials.gov/study/" + t.nct, t.nct)).join(", ")}</div>` : ""}
+    ${nm ? `<div class="small">${link(pubmedSearch(`${nm.last} ${nm.first[0]}[Author] AND ${cancer}`), "Their publications on PubMed ↗")} · ${link("https://www.google.com/search?q=" + encodeURIComponent(`${nm.first} ${nm.last} ASCO OR ESMO ${cancer}`), "ASCO/ESMO activity ↗")}</div>` : ""}
+    <div class="row" style="margin-top:12px">
+      <a class="btn" href="${esc(webUrl(o))}" target="_blank" rel="noopener">${o.is_team ? "Find the center's webpage" : "Find the oncologist's webpage"}</a>
+      <a class="btn ghost" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(o.address)}" target="_blank" rel="noopener">Directions</a>
+    </div>
+    <p class="small" style="margin-top:8px">${o.source === "claude" ? "Suggested by Claude from its own knowledge. Confirm this center exists and offers these options." : "Listed as a site contact on ClinicalTrials.gov. Confirm details with the office."}</p>`;
+}
+window.addEventListener("resize", () => { if (!$("s6").hidden && S.oncs.length) renderOncMap(); });
+</script>

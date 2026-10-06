@@ -129,11 +129,11 @@ button,input,select,textarea{font:inherit;color:inherit}
 
 <div class="keybar" id="keyBar">
   <i class="ti ti-key"></i>
-  <span>Anthropic API key (used only from this browser to call Claude):</span>
+  <span>Anthropic API key, optional (adds Claude analysis; used only from this browser):</span>
   <input type="password" id="apiKey" placeholder="sk-ant-..." autocomplete="off">
   <label><input type="checkbox" id="rememberKey"> Remember on this computer</label>
   <button class="btn btn-p" id="saveKey" style="padding:5px 12px">Save</button>
-  <span id="keyStatus">Not set. Steps 3, 5 and 6 need it.</span>
+  <span id="keyStatus">Optional. Without a key the app runs in basic mode.</span>
 </div>
 
 <div class="snav" role="tablist">
@@ -300,7 +300,7 @@ for (const id of ["i1t", "i2t"]) $(id).innerHTML = PLAN_TYPES.map(p => `<option 
 let apiKey = "";
 try { apiKey = localStorage.getItem("ccn_apikey") || sessionStorage.getItem("ccn_apikey") || ""; $("rememberKey").checked = !!localStorage.getItem("ccn_apikey"); } catch (e) {}
 function showKeyStatus() {
-  $("keyStatus").textContent = apiKey ? "Key saved. Claude features are on." : "Not set. Steps 3, 5 and 6 need it.";
+  $("keyStatus").textContent = apiKey ? "Key saved. Full Claude analysis is on." : "Optional. Without a key the app runs in basic mode.";
   $("apiKey").value = apiKey;
   if (apiKey) $("keyBar").hidden = true;
 }
@@ -471,6 +471,12 @@ $("analyzeBtn").onclick = async () => {
   if (!narr) { $("dout").innerHTML = `<div class="alert al-w"><i class="ti ti-alert-triangle"></i>Describe your disease status first.</div>`; return; }
   const btn = $("analyzeBtn"); btn.disabled = true; btn.innerHTML = `<span class="spin"></span> Organizing…`;
   $("dout").innerHTML = "";
+  if (!apiKey) {
+    S.disease = parseDiseaseLocally(narr);
+    $("dout").innerHTML = `<div class="alert al-w"><i class="ti ti-info-circle"></i><span><b>Basic mode:</b> organized by keyword matching, so some details may be missed. Add an API key at the top for Claude's analysis.</span></div>` + renderDisease(S.disease);
+    btn.disabled = false; btn.innerHTML = `<i class="ti ti-wand"></i> Organize again`;
+    return;
+  }
   try {
     const { data } = await askClaude({
       system: "You are an oncology nurse navigator. Organize a patient's own description of their cancer into structured fields, using plain language a patient understands. Use only what the patient wrote; never invent results. Use an empty string or empty list when something wasn't mentioned. In missing_info, list the specific details an oncologist would want that the patient didn't mention. In search.condition put the standard cancer name for a ClinicalTrials.gov condition search (e.g., 'Breast Cancer'); in search.keywords put 2-5 short terms (biomarkers, setting) useful for finding matching trials.",
@@ -536,7 +542,7 @@ function compactTrial(s) {
     summary: (p.descriptionModule?.briefSummary || "").slice(0, 700),
     eligibility: (p.eligibilityModule?.eligibilityCriteria || "").slice(0, 1800),
     officials: (p.contactsLocationsModule?.overallOfficials || []).map(o => o.name),
-    nearest: near.slice(0, 3), siteCount: locs.length,
+    nearest: near.slice(0, 6), siteCount: locs.length,
   };
 }
 async function findTrials(d) {
@@ -622,7 +628,7 @@ async function runOptions() {
   $("optOut").innerHTML = ""; $("oncBtn").disabled = true;
   const narr = $("dnarr").value.trim();
   if (!narr) { $("optProgress").innerHTML = `<div class="alert al-w"><i class="ti ti-alert-triangle"></i>Add your disease status in step 3 first.</div>`; return; }
-  const P = progress($("optProgress"), ["Organize disease status", "Confirm your location", "Search recruiting trials on ClinicalTrials.gov", "Search recent research on PubMed", "Review NCCN guidelines and ASCO/ESMO evidence with Claude (1–3 minutes)"]);
+  const P = progress($("optProgress"), ["Organize disease status", "Confirm your location", "Search recruiting trials on ClinicalTrials.gov", "Search recent research on PubMed", apiKey ? "Review NCCN guidelines and ASCO/ESMO evidence with Claude (1–3 minutes)" : "Rank matching trials and combine with your doctor's recommendations"]);
   try {
     P.start(0);
     if (!S.disease) { $("analyzeBtn").click(); while ($("analyzeBtn").disabled) await sleep(300); }
@@ -642,6 +648,14 @@ async function runOptions() {
     catch (e) { S.pubmed = []; P.fail(3, "PubMed didn't respond"); }
 
     P.start(4);
+    if (!apiKey) {
+      const data = buildBasicOptions(S.disease, $("drecs").value);
+      S.options = data; S.optionSources = [];
+      P.done(4, `basic mode: ${data.options.length} options from your doctor's list and matching trials`);
+      $("optOut").innerHTML = renderOptions(data, []);
+      $("oncBtn").disabled = !data.options.length;
+      return;
+    }
     const trialBrief = S.trials.slice(0, 30).map(t => ({ nct: t.nct, title: t.title, phase: t.phase, sponsor: t.sponsor, interventions: t.interventions, eligibility: t.eligibility, nearest_sites: t.nearest.map(n => `${n.facility}, ${n.city} ${n.state} (${Math.round(n.mi)} mi)`) }));
     const prompt = `PATIENT DISEASE STATUS (structured):\n${JSON.stringify(S.disease, null, 1)}\n\nPATIENT'S OWN WORDS:\n${narr}\n\nDOCTOR-RECOMMENDED NEXT STEPS:\n${$("drecs").value.trim() || "(none provided — suggest next steps yourself)"}\n\nPATIENT LOCATION: ${S.place?.label || "not provided"}; willing to travel ${radius() ? radius() + " miles" : "any distance"}.\n\nRECRUITING CLINICAL TRIAL CANDIDATES (ClinicalTrials.gov, live):\n${JSON.stringify(trialBrief)}\n\nRECENT PUBMED ARTICLES (live):\n${JSON.stringify(S.pubmed.map(p => ({ pmid: p.pmid, title: p.title, journal: p.journal, date: p.date, url: p.url, abstract: p.abstract })))}`;
     const { data, sources } = await askClaude({ system: OPTIONS_SYSTEM, prompt, web: 8, effort: "high" });
@@ -662,7 +676,8 @@ function renderOptions(d, sources) {
   const opts = d.options || [];
   const trials = (d.top_trials || []).map(t => ({ ...t, data: S.trials.find(x => x.nct === t.nct_id) })).filter(t => t.data);
   const counts = {}; opts.forEach(o => (o.sources || []).forEach(s => counts[s] = (counts[s] || 0) + 1));
-  return `<div class="alert al-s"><i class="ti ti-circle-check"></i><span>${opts.length} next-step options for <b>${esc(S.disease.diagnosis)}</b>: ${Object.entries(counts).map(([k, v]) => `${v} ${esc(SRC_LABEL[k] || k).toLowerCase()}`).join(", ")}. Bring this list to your oncologist.</span></div>
+  return `${d.basic ? `<div class="alert al-w"><i class="ti ti-info-circle"></i><span><b>Basic mode (no API key).</b> Options come from your doctor's list and recruiting trials that match your keywords. NCCN guideline and ASCO/ESMO review need Claude: add an API key at the top, then run this step again. Meanwhile, the free ${link(nccnPatientUrl(), "NCCN Guidelines for Patients")} cover standard treatment for most cancers.</span></div>` : ""}
+  <div class="alert al-s"><i class="ti ti-circle-check"></i><span>${opts.length} next-step options for <b>${esc(S.disease.diagnosis)}</b>: ${Object.entries(counts).map(([k, v]) => `${v} ${esc(SRC_LABEL[k] || k).toLowerCase()}`).join(", ")}. Bring this list to your oncologist.</span></div>
   <div class="card">
     <div class="card-hdr"><div class="card-icon" style="background:var(--t50);color:var(--t600)"><i class="ti ti-list-check"></i></div>
       <div><div class="card-title">Recommended next steps</div><div class="card-sub">Each option shows where the recommendation comes from</div></div></div>
@@ -684,10 +699,140 @@ function renderOptions(d, sources) {
       ${t.data.nearest.length ? `<div class="small" style="margin-top:3px"><i class="ti ti-map-pin"></i> Nearest site: ${esc(t.data.nearest[0].facility)}, ${esc(t.data.nearest[0].city)} (${Math.round(t.data.nearest[0].mi)} mi)${t.data.nearest[0].pis.length ? ` · PI: ${esc(t.data.nearest[0].pis.join(", "))}` : ""}</div>` : ""}
     </div>`).join("") : `<div class="alert al-w"><i class="ti ti-info-circle"></i>No recruiting trial matched well. Ask your oncologist about trials at nearby cancer centers.</div>`}
   </div>
+  ${d.basic && S.pubmed.length ? `<div class="card"><div class="card-hdr"><div class="card-icon" style="background:var(--b50);color:var(--b600)"><i class="ti ti-book"></i></div><div><div class="card-title">Recent research to discuss</div><div class="card-sub">PubMed, last 2 years, matched to your cancer and biomarkers</div></div></div>${S.pubmed.map(p => `<div style="margin-bottom:6px">• ${link(p.url, p.title)}<div class="small">${esc(p.authors)} · ${esc(p.journal)}, ${esc(p.date)}</div></div>`).join("")}</div>` : ""}
   ${(d.questions_for_doctor || []).length ? `<div class="card"><div class="card-hdr"><div class="card-icon" style="background:var(--b50);color:var(--b600)"><i class="ti ti-message-question"></i></div><div><div class="card-title">Questions to ask your oncologist</div></div></div>${list(d.questions_for_doctor)}</div>` : ""}
   <details class="card"><summary style="cursor:pointer;font-weight:600">Sources consulted (${S.pubmed.length} PubMed articles, ${sources.length} web pages)</summary>
     <div style="margin-top:8px" class="small">${S.pubmed.map(p => `<div>• ${link(p.url, p.title)} <span>${esc(p.journal)} ${esc(p.date)}</span></div>`).join("")}${sources.map(s => `<div>• ${link(s.url, s.title)}</div>`).join("")}</div>
   </details>`;
+}
+
+// ───────────────────────── Basic mode (no API key) ─────────────────────────
+const nccnPatientUrl = () => "https://www.nccn.org/patientresources/patient-resources/guidelines-for-patients";
+const CANCERS = [
+  [/breast/, "Breast Cancer"], [/non[- ]?small[- ]cell|nsclc/, "Non-Small Cell Lung Cancer"], [/small[- ]cell lung|\bsclc\b/, "Small Cell Lung Cancer"],
+  [/lung (cancer|adenocarcinoma|carcinoma)|lung tumou?r/, "Lung Cancer"], [/colorectal|colon cancer|rectal cancer|\bcrc\b/, "Colorectal Cancer"],
+  [/prostate/, "Prostate Cancer"], [/pancrea/, "Pancreatic Cancer"], [/ovar/, "Ovarian Cancer"], [/melanoma/, "Melanoma"],
+  [/multiple myeloma|\bmyeloma/, "Multiple Myeloma"], [/lymphoma|dlbcl/, "Lymphoma"], [/leuka?emia|\baml\b|\bcll\b/, "Leukemia"],
+  [/bladder|urothelial/, "Bladder Cancer"], [/kidney cancer|renal cell/, "Kidney Cancer"], [/hepatocellular|\bhcc\b|liver cancer/, "Liver Cancer"],
+  [/gastric|stomach cancer/, "Gastric Cancer"], [/esophag/, "Esophageal Cancer"], [/head and neck|oropharyn|laryn|tongue cancer/, "Head and Neck Cancer"],
+  [/glioblastoma|glioma|brain tumou?r/, "Brain Tumor"], [/thyroid/, "Thyroid Cancer"], [/cervical cancer|cervix/, "Cervical Cancer"],
+  [/endometri|uterine/, "Endometrial Cancer"], [/sarcoma/, "Sarcoma"], [/cholangio|bile duct/, "Cholangiocarcinoma"], [/mesothelioma/, "Mesothelioma"],
+];
+const MARKERS = [
+  ["ER", /\b(?:ER|estrogen receptor)[\s-]*(positive|negative|\+|-)/i], ["PR", /\b(?:PR|progesterone receptor)[\s-]*(positive|negative|\+|-)/i],
+  ["HER2", /\bHER-?2[\s-]*(ultra-?low|low|positive|negative|\+|-|\(IHC\s*[0-3]\+?\))/i], ["PIK3CA", /\bPIK3CA\b(?:\s*\(?(\w+\d+\w*)\)?)?/i],
+  ["ESR1", /\bESR1\b(?:\s*(\w+\d+\w*))?/i], ["BRCA1", /\bBRCA1\b/i], ["BRCA2", /\bBRCA2\b/i], ["EGFR", /\bEGFR\b(?:\s*(exon\s*\d+\w*|L858R|T790M))?/i],
+  ["ALK", /\bALK\b(?:[\s-]*(positive|fusion|rearrange\w*))?/i], ["ROS1", /\bROS1\b/i], ["KRAS", /\bKRAS\b(?:\s*(G12\w))?/i], ["BRAF", /\bBRAF\b(?:\s*(V600\w?))?/i],
+  ["MET", /\bMET\b(?:\s*(exon\s*14|amplif\w*))?/], ["RET", /\bRET\b(?:[\s-]*(fusion|mutation))?/], ["NTRK", /\bNTRK\d?\b/i], ["PD-L1", /\bPD-?L1\b(?:[\s:]*(\d+%|high|low|positive|negative))?/i],
+  ["MSI-H / dMMR", /\b(MSI-?H|dMMR|mismatch repair deficien\w*)\b/i], ["TMB-high", /\bTMB[\s-]*(high|\d+)/i], ["HRD", /\bHRD\b/i], ["AR", /\bAR[\s-]*(positive|negative|\+|-|V7)/],
+];
+const DRUGS = ["chemotherapy","radiation","surgery","mastectomy","lumpectomy","lobectomy","prostatectomy","immunotherapy","hormone therapy","letrozole","anastrozole","exemestane","tamoxifen","fulvestrant","elacestrant","palbociclib","ribociclib","abemaciclib","alpelisib","capivasertib","inavolisib","everolimus","trastuzumab","pertuzumab","T-DM1","trastuzumab deruxtecan","sacituzumab","datopotamab","olaparib","talazoparib","niraparib","rucaparib","pembrolizumab","nivolumab","atezolizumab","durvalumab","ipilimumab","cemiplimab","osimertinib","erlotinib","gefitinib","afatinib","alectinib","lorlatinib","crizotinib","sotorasib","adagrasib","dabrafenib","trametinib","encorafenib","cetuximab","panitumumab","bevacizumab","FOLFOX","FOLFIRI","FOLFIRINOX","capecitabine","oxaliplatin","irinotecan","5-FU","carboplatin","cisplatin","paclitaxel","docetaxel","nab-paclitaxel","gemcitabine","pemetrexed","doxorubicin","cyclophosphamide","eribulin","enzalutamide","abiraterone","apalutamide","darolutamide","leuprolide","lutetium","rituximab","lenalidomide","bortezomib","daratumumab","CAR-T","stem cell transplant","denosumab","zoledronic acid"];
+const SYMPTOMS = ["pain","fatigue","tiredness","nausea","vomiting","diarrhea","constipation","shortness of breath","cough","weight loss","loss of appetite","neuropathy","numbness","fever","headache","swelling","bleeding","insomnia","anxiety","depression","hot flashes","mouth sores","rash","hair loss","low white counts","neutropenia","anemia","low platelets"];
+const CONDITIONS = ["diabetes","hypertension","high blood pressure","heart disease","heart failure","atrial fibrillation","kidney disease","COPD","asthma","osteoporosis","osteopenia","obesity","stroke","hepatitis","HIV","arthritis","thyroid disease","sleep apnea"];
+const SITES = ["bone","bones","liver","lung","lungs","brain","lymph node","lymph nodes","peritoneum","adrenal","skin","chest wall","pleura","spine","pelvis"];
+
+function parseDiseaseLocally(narr) {
+  const l = narr.toLowerCase();
+  const sentences = narr.split(/(?<=[.!?\n])\s+/);
+  const cancer = (CANCERS.find(([re]) => re.test(l)) || [, "Cancer"])[1];
+  const met = /metasta|stage\s*(iv|4)\b|spread|advanced/.test(l);
+  const st = narr.match(/stage\s*(0|iv|iii|ii|i|[1-4])\s*([abc])?\b/i);
+  const stAt = st ? `Stage ${st[1].toUpperCase()}${(st[2] || "").toUpperCase()}` : "";
+  const stage = met && !/IV|4/.test(stAt) ? `Stage IV (metastatic)${stAt ? `; first diagnosed at ${stAt}` : ""}` : stAt;
+  // use the LAST mention of each marker (most recent result); fall back to "mutation" when the text says so
+  const biomarkers = MARKERS.map(([name, re]) => {
+    const all = [...narr.matchAll(new RegExp(re.source, re.flags.includes("i") ? "gi" : "g"))];
+    if (!all.length) return null;
+    const m = all[all.length - 1];
+    const after = narr.slice(m.index, m.index + m[0].length + 30);
+    const variant = (after.match(/\b([A-Z]\d{2,4}[A-Z*]|exon\s*\d+\s*\w*)\b/) || [])[1];
+    const result = m[1] || variant || (/mutat|alter/i.test(after) ? "mutation" : "mentioned");
+    return { name, result: result.replace(/^\+$/, "positive").replace(/^-$/, "negative") };
+  }).filter(Boolean);
+  const has = (word) => new RegExp(`\\b${word.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&")}\\b`, "i").test(narr);
+  const prior = DRUGS.filter(has).map(t => ({ treatment: t, type: "", when: "", outcome: "" }));
+  const seSentences = sentences.filter(s => /side effect|from (the )?(chemo|treatment)|caused by/i.test(s)).join(" ");
+  const symptoms = SYMPTOMS.filter(s => has(s) && !new RegExp(`\\b${s}\\b`, "i").test(seSentences));
+  const sideEffects = SYMPTOMS.filter(s => new RegExp(`\\b${s}\\b`, "i").test(seSentences));
+  const comorbid = CONDITIONS.filter(has);
+  const sites = met ? [...new Set(SITES.filter(s => sentences.some(x => /spread|metasta|scan|biopsy|lesion|spots?/i.test(x) && new RegExp(`\\b${s}\\b`, "i").test(x))).map(s => ({ bones: "bone", lungs: "lung", "lymph nodes": "lymph node" })[s] || s))].filter(s => !cancer.toLowerCase().includes(s)) : [];
+  const progressing = /progress|growing|worse|new (spots|lesions)|spread again/.test(l);
+  const keywords = [...biomarkers.filter(b => !/negative/i.test(b.result) && !["ER", "PR", "AR"].includes(b.name)).map(b => b.name.split(" ")[0]), ...(met ? ["metastatic"] : [])].slice(0, 4);
+  return {
+    diagnosis: `${met && !/metastatic/i.test(cancer) ? "Metastatic " : ""}${cancer}`, cancer_type: cancer, histology: "", stage,
+    diagnosed: (narr.match(/diagnosed[^.]*?\b(19|20)\d{2}\b/i) || [""])[0].match(/(19|20)\d{2}/)?.[0] || "",
+    metastatic_sites: sites, biomarkers, prior_treatments: prior,
+    current_status: progressing ? "Your description suggests the cancer is growing or progressing." : "",
+    symptoms, comorbidities: comorbid, side_effects: sideEffects, performance_status: "",
+    summary: `${cancer}${stage ? `, ${stage}` : ""}${sites.length ? `, spread to ${sites.join(", ")}` : ""}.${biomarkers.length ? ` Biomarkers mentioned: ${biomarkers.map(b => `${b.name} ${b.result}`).join(", ")}.` : ""}${prior.length ? ` Treatments mentioned: ${prior.map(p => p.treatment).join(", ")}.` : ""}${progressing ? " Recent progression mentioned." : ""}`,
+    missing_info: ["Exact histology (tumor type) from the pathology report", "Dates and results of each treatment line", "Most recent scan results", "Full biomarker or genomic testing report", "How active you are day to day (performance status)"].filter((x, i) => i !== 3 || !biomarkers.length),
+    search: { condition: cancer, keywords },
+  };
+}
+
+function buildBasicOptions(d, drecs) {
+  const opts = [];
+  const docLines = (drecs || "").split("\n").map(s => s.replace(/^[•\-*\d.)\s]+/, "").trim()).filter(s => s.length > 2);
+  docLines.forEach(line => opts.push({ id: "", option: line, kind: "", sources: ["Doctor"], rationale: "Recommended by your doctor.", nccn_reference: "", evidence: [], nct_id: "", priority: "high", fit_notes: "" }));
+  // trial-matching keywords: actionable biomarkers only (ER/PR/AR and negative results appear in almost every trial)
+  const kws = [...new Set([...(d.search?.keywords || []), ...(d.biomarkers || []).filter(b => !/negative/i.test(b.result) && !["ER", "PR", "AR"].includes(b.name)).map(b => b.name.split(" ")[0]), ...(d.biomarkers || []).filter(b => /low|ultra/i.test(b.result)).map(b => `${b.name}-low`)])].map(k => k.toLowerCase()).filter(k => k !== "metastatic");
+  const r = radius();
+  const scored = S.trials.map(t => {
+    const text = `${t.title} ${t.interventions.join(" ")} ${t.conditions.join(" ")} ${t.eligibility}`.toLowerCase();
+    const hits = [...new Set(kws.filter(k => new RegExp(`\\b${k.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&")}\\b`).test(text)))];
+    const phase = /3/.test(t.phase) ? 3 : /2/.test(t.phase) ? 2 : /1/.test(t.phase) ? 1 : 0;
+    const near = t.nearest[0]?.mi;
+    const score = hits.length * 3 + phase + (near == null ? 0 : near <= (r || 50) ? 2 : 0);
+    return { t, hits, score };
+  }).sort((a, b) => b.score - a.score).slice(0, 5);
+  scored.forEach(({ t, hits }) => opts.push({
+    id: "", option: t.title, kind: "clinical trial", sources: ["Trial"],
+    rationale: `${t.phase} trial, recruiting now${hits.length ? `; mentions ${hits.join(", ")}` : ""}${t.nearest[0] ? `; nearest site ${t.nearest[0].facility} (${Math.round(t.nearest[0].mi)} mi)` : ""}.`,
+    nccn_reference: "", evidence: [], nct_id: t.nct, priority: "medium", fit_notes: "Read the full eligibility criteria and ask the trial team whether you qualify.",
+  }));
+  opts.forEach((o, i) => o.id = "O" + (i + 1));
+  return {
+    basic: true, options: opts,
+    top_trials: scored.slice(0, 3).map(({ t, hits }) => ({ nct_id: t.nct, why_match: hits.length ? `Matches ${hits.join(", ")} and is recruiting ${d.cancer_type || ""} patients.` : `Recruiting ${d.cancer_type || "cancer"} patients near you.`, eligibility_concerns: "Not checked in basic mode. Review the eligibility criteria on ClinicalTrials.gov." })),
+    questions_for_doctor: [
+      "What do the NCCN guidelines recommend for my cancer type, stage and biomarkers?",
+      "Am I a candidate for any of these clinical trials? Can you contact the trial team?",
+      "Is any additional biomarker or genomic testing needed before choosing the next treatment?",
+      "What are the goals of the next treatment, and what side effects should I expect?",
+      "Which of these options does my insurance cover, and what will my out-of-pocket cost be?",
+    ],
+  };
+}
+
+function buildBasicOncologists(opts) {
+  const r = radius();
+  const byKey = new Map();
+  for (const o of opts.filter(o => o.nct_id)) {
+    const t = S.trials.find(x => x.nct === o.nct_id);
+    if (!t) continue;
+    for (const site of t.nearest) {
+      if (r && site.mi > r) continue;
+      const people = site.pis.length ? site.pis : [null];
+      for (const pi of people) {
+        const key = (pi || "team") + "|" + site.facility;
+        const e = byKey.get(key) || {
+          name: pi || `Trial team at ${site.facility}`, credentials: "", is_team: !pi, institution: site.facility, department: "",
+          address: [site.facility, site.city, site.state, site.zip].filter(Boolean).join(", "), phone: "",
+          profile_url: "https://www.google.com/search?q=" + encodeURIComponent(`${pi || ""} ${site.facility} ${site.city || ""} oncology`.trim()),
+          profile_label: pi ? "Search for this oncologist" : "Search for this cancer center",
+          specialty: pi ? "Clinical trial site investigator" : "Clinical trial site", focus: t.conditions.slice(0, 3).join(", "),
+          years_experience: "", experience_basis: "", option_ids: [], option_rationale: "",
+          conference_activity: [], insurance: { status: "unconfirmed", note: "Basic mode doesn't check insurance. Call the site to ask. Most health plans must cover routine care costs in approved clinical trials.", url: "" },
+          lat: site.lat, lng: site.lng, miles: site.mi, trialNcts: [],
+        };
+        if (!e.option_ids.includes(o.id)) e.option_ids.push(o.id);
+        e.trialNcts.push(t.nct);
+        e.option_rationale = `${pi ? "Leads" : "Runs"} trial ${[...new Set(e.trialNcts)].join(", ")} at this site.`;
+        byKey.set(key, e);
+      }
+    }
+  }
+  return [...byKey.values()].sort((a, b) => (a.miles ?? 1e9) - (b.miles ?? 1e9)).slice(0, 12);
 }
 
 // ───────────────────────── Step 2.2: oncologists ─────────────────────────
@@ -709,7 +854,7 @@ $("oncBtn").onclick = runOncologists;
 async function runOncologists() {
   go(6);
   $("oncOut").innerHTML = "";
-  const P = progress($("oncProgress"), ["Collect trial investigators near you", "Search oncologist profiles, ASCO/ESMO activity and insurance with Claude (2–4 minutes)", "Check each oncologist's PubMed publications", "Check recruiting trials each oncologist leads", "Map practice locations and distances"]);
+  const P = progress($("oncProgress"), ["Collect trial investigators near you", apiKey ? "Search oncologist profiles, ASCO/ESMO activity and insurance with Claude (2–4 minutes)" : "Match trial investigators and site teams to your options (basic mode)", "Check each oncologist's PubMed publications", "Check recruiting trials each oncologist leads", "Map practice locations and distances"]);
   try {
     P.start(0);
     const opts = S.options.options || [];
@@ -721,13 +866,33 @@ async function runOncologists() {
     }
     P.done(0, `${pis.length} trial sites with named investigators`);
 
+    if (!apiKey) {
+      P.start(1);
+      const oncs = buildBasicOncologists(opts);
+      P.done(1, `${oncs.length} investigators or site teams`);
+      await enrichOncologists(oncs, P);
+      S.oncSources = [];
+      renderOncologists();
+      return;
+    }
+
     P.start(1);
     const ins = insuranceText();
     const prompt = `PATIENT: ${S.disease.summary}\nDiagnosis: ${S.disease.diagnosis}; stage: ${S.disease.stage}; biomarkers: ${(S.disease.biomarkers || []).map(b => b.name + " " + b.result).join(", ")}\n\nNEXT-STEP OPTIONS:\n${JSON.stringify(opts.map(o => ({ id: o.id, option: o.option, sources: o.sources, nct_id: o.nct_id })))}\n\nPREFERRED LOCATION: ${S.place?.label || $("loc").value || "not provided"}; travel limit: ${r ? r + " miles" : "any distance"}.\n\nINSURANCE: primary ${ins.primary}; secondary ${ins.secondary}.\n\nTRIAL SITE INVESTIGATORS NEAR THE PATIENT (ClinicalTrials.gov, live):\n${JSON.stringify(pis)}`;
     const { data, sources } = await askClaude({ system: ONC_SYSTEM, prompt, web: 25, effort: "high" });
     let oncs = (data.oncologists || []).filter(o => (o.option_ids || []).length);
     P.done(1, `${oncs.length} oncologists or teams matched`);
+    S.oncSources = sources;
+    await enrichOncologists(oncs, P);
+    renderOncologists();
+  } catch (e) {
+    $("oncOut").innerHTML = `<div class="alert al-e"><i class="ti ti-alert-circle"></i>${esc(explainError(e))}</div>`;
+  }
+}
 
+// PubMed + ClinicalTrials.gov activity, map location and distance for each oncologist (both modes)
+async function enrichOncologists(oncs, P) {
+    const r = radius();
     const cancer = (S.disease.search?.condition || S.disease.cancer_type || "cancer").replace(/[()]/g, "");
     P.start(2);
     for (const o of oncs) {
@@ -752,6 +917,7 @@ async function runOncologists() {
 
     P.start(4);
     for (const o of oncs) {
+      if (o.lat != null) { o.miles = S.place ? miles(S.place, o) : null; continue; } // trial sites come with coordinates
       let g = o.address ? await geocode(o.address) : null;
       if (!g && o.institution) { await sleep(1100); g = await geocode(o.institution + (o.address ? ", " + o.address.split(",").slice(-2).join(",") : "")); }
       if (g) { o.lat = g.lat; o.lng = g.lng; o.miles = S.place ? miles(S.place, g) : null; }
@@ -760,11 +926,7 @@ async function runOncologists() {
     oncs.sort((a, b) => (a.miles ?? 1e9) - (b.miles ?? 1e9));
     oncs.forEach((o, i) => { o.n = i + 1; o.color = PIN_COLORS[i % PIN_COLORS.length]; o.outside = r && o.miles != null && o.miles > r; });
     P.done(4, `${oncs.filter(o => o.lat != null).length} of ${oncs.length} mapped`);
-    S.oncs = oncs; S.oncSources = sources;
-    renderOncologists();
-  } catch (e) {
-    $("oncOut").innerHTML = `<div class="alert al-e"><i class="ti ti-alert-circle"></i>${esc(explainError(e))}</div>`;
-  }
+    S.oncs = oncs;
 }
 function personName(full) {
   const parts = String(full || "").replace(/^Dr\.?\s+/i, "").replace(/,.*$/, "").replace(/\b[A-Z]\.\s*/g, "").trim().split(/\s+/).filter(Boolean);
@@ -789,7 +951,7 @@ function renderOncologists() {
     <div class="card-hdr"><div class="card-icon" style="background:var(--t50);color:var(--t600)"><i class="ti ti-table"></i></div>
       <div><div class="card-title">Treatment options and matched oncologists</div><div class="card-sub">Hover a number to see it on the map</div></div></div>
     <div class="tblwrap"><table class="tbl" id="matchTbl"><thead><tr><th style="width:34%">Option</th><th style="width:18%">Source</th><th>Matched oncologists or teams</th></tr></thead><tbody>
-    ${opts.map(o => { const m = oncs.filter(x => (x.option_ids || []).includes(o.id)); return `<tr data-opt="${esc(o.id)}"><td><b>${esc(o.option)}</b></td><td>${srcTags(o.sources)}</td><td>${m.length ? m.map(x => `<span class="chip" data-onc="${x.n}"><span class="num" style="background:${x.color}">${x.n}</span>${esc(x.name)}${x.insurance?.status !== "accepted" ? ` <i class="ti ti-alert-triangle" style="color:var(--a400)" title="Insurance not confirmed"></i>` : ""}</span>`).join("") : `<span class="small">No match found nearby</span>`}</td></tr>`; }).join("")}
+    ${opts.map(o => { const m = oncs.filter(x => (x.option_ids || []).includes(o.id)); return `<tr data-opt="${esc(o.id)}"><td><b>${esc(o.option)}</b></td><td>${srcTags(o.sources)}</td><td>${m.length ? m.map(x => `<span class="chip" data-onc="${x.n}"><span class="num" style="background:${x.color}">${x.n}</span>${esc(x.name)}${x.insurance?.status !== "accepted" ? ` <i class="ti ti-alert-triangle" style="color:var(--a400)" title="Insurance not confirmed"></i>` : ""}</span>`).join("") : `<span class="small">${S.options.basic ? "Matching needs Claude (add an API key)" : "No match found nearby"}</span>`}</td></tr>`; }).join("")}
     </tbody></table></div>
   </div>
   <div class="onc-layout">
@@ -832,7 +994,7 @@ function popupHtml(o) {
   return `<b>${o.n}. ${esc(o.name)}</b>${o.credentials ? `, ${esc(o.credentials)}` : ""}<br>${esc(o.institution)}<br>
     <span style="color:#555">${esc(distLabel(o))}</span><br>
     <b>Can provide:</b> ${opts.map(x => esc(x.option)).join("; ")}<br>
-    ${safeUrl(o.profile_url) ? `<a href="${esc(o.profile_url)}" target="_blank" rel="noopener">Open oncologist's webpage ↗</a>` : ""}`;
+    ${safeUrl(o.profile_url) ? `<a href="${esc(o.profile_url)}" target="_blank" rel="noopener">${esc(o.profile_label || "Open oncologist's webpage")} ↗</a>` : ""}`;
 }
 function activate(n, fromMap) {
   const o = S.oncs.find(x => x.n === n);
@@ -852,7 +1014,7 @@ function panelHtml(o) {
       <span class="pnum" style="background:${o.color};width:28px;height:28px;font-size:13px">${o.n}</span>
       <div style="min-width:0"><div style="font-weight:700;font-size:15px">${esc(o.name)}${o.credentials ? `, ${esc(o.credentials)}` : ""}</div>
       <div class="small">${esc(o.institution)}${o.department ? ` · ${esc(o.department)}` : ""}</div></div></div>
-    <div style="margin-bottom:8px">${insFlag(o)}${o.insurance?.note ? `<div class="small">${esc(o.insurance.note)} ${link(o.insurance.url, "source")}</div>` : ""}</div>
+    <div style="margin-bottom:8px">${insFlag(o)}${o.insurance?.note ? `<div class="small">${esc(o.insurance.note)} ${safeUrl(o.insurance.url) ? link(o.insurance.url, "source") : ""}</div>` : ""}</div>
     <div class="sgrid" style="grid-template-columns:1fr 1fr;margin-bottom:8px">
       <div class="si"><strong>Specialty</strong>${esc(o.specialty || "—")}${o.focus ? `<div class="small">${esc(o.focus)}</div>` : ""}</div>
       <div class="si"><strong>Experience</strong>${esc(o.years_experience || "Not found")}${o.experience_basis ? `<div class="small">${esc(o.experience_basis)}</div>` : ""}</div>
@@ -868,7 +1030,7 @@ function panelHtml(o) {
       ${(o.conference_activity || []).length ? `<div style="margin-top:4px"><b>ASCO / ESMO:</b></div>${o.conference_activity.map(c => `<div>• ${link(c.url, c.label)}</div>`).join("")}` : ""}
     </div>
     <div class="row" style="margin-top:10px">
-      ${safeUrl(o.profile_url) ? `<a class="btn btn-p" href="${esc(o.profile_url)}" target="_blank" rel="noopener"><i class="ti ti-external-link"></i> Oncologist's webpage</a>` : ""}
+      ${safeUrl(o.profile_url) ? `<a class="btn btn-p" href="${esc(o.profile_url)}" target="_blank" rel="noopener"><i class="ti ti-external-link"></i> ${esc(o.profile_label || "Oncologist's webpage")}</a>` : ""}
       ${o.address ? `<a class="btn btn-o" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(o.address)}" target="_blank" rel="noopener"><i class="ti ti-directions"></i> Directions</a>` : ""}
     </div>
     <div class="small" style="margin-top:8px">Profile details come from public webpages and may be out of date. Confirm with the office.</div>`;

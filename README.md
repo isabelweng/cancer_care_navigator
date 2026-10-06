@@ -8,7 +8,7 @@ You describe your situation in your own words. The app turns it into an organize
 
 ## Quick start
 
-**You need:** a recent version of Chrome, Edge, Firefox or Safari; an internet connection; and an [Anthropic API key](https://console.anthropic.com/settings/keys).
+**You need:** a recent version of Chrome, Edge, Firefox or Safari, and an internet connection. An [Anthropic API key](https://console.anthropic.com/settings/keys) is optional (see [Basic mode vs. full mode](#basic-mode-vs-full-mode)).
 
 **Windows**
 
@@ -24,9 +24,30 @@ sh start.sh
 
 Then open `http://localhost:8765/cancer_care_navigator.html` if it doesn't open by itself. Press Ctrl+C to stop.
 
-**First run:** click **API key** at the top right, paste your Anthropic API key, and click **Save**. Tick "Remember on this computer" if you don't want to paste it each time.
+**API key (optional):** to turn on full mode, click **API key** at the top right, paste your Anthropic API key, and click **Save**. Tick "Remember on this computer" if you don't want to paste it each time.
+
+## Basic mode vs. full mode
+
+The app works without an API key. Adding one turns on Claude's analysis.
+
+| | Basic mode (no key, free) | Full mode (with an Anthropic API key) |
+|---|---|---|
+| Organizing your disease description | Keyword matching (cancer type, stage, biomarkers, treatments, symptoms) | Claude reads and structures it, and lists what's missing |
+| Next-step options | Your doctor's recommendations + top 5 matching recruiting trials, plus recent PubMed research and a link to the free NCCN Guidelines for Patients | Adds NCCN guideline options and emerging ASCO/ESMO evidence, with references |
+| Clinical trials | Live, ranked by biomarker match, phase and distance | Live, top 3 chosen by Claude with eligibility notes |
+| Oncologists | Investigators and site teams running those trials near you, with PubMed and trial activity | Adds oncologists found on cancer-center websites, experience, ASCO/ESMO activity and insurance checks |
+| Map, distances, table ↔ map linking | ✅ | ✅ |
+| Insurance | Always "not confirmed" | Checked against public sources; unconfirmed results flagged |
 
 > Opening `cancer_care_navigator.html` directly from the folder (a `file://` address) does not work, because browsers block the app's code modules there. Always use the launcher.
+
+## claude.ai version (no API key)
+
+`claude-ai-version/` holds a second version that runs as a page on claude.ai, using Claude through your claude.ai account instead of an API key. It needs the **Clinical Trials** connector (claude.ai Settings → Connectors) and asks you to allow Claude and the connector the first time.
+
+Compared with the local app in full mode, it has no live web search: NCCN and emerging-evidence items come from Claude's own knowledge, oncologists come from ClinicalTrials.gov site listings plus cancer centers Claude suggests, and links to webpages and PubMed are searches rather than direct pages. The map is an outline map with approximate locations, because claude.ai pages can't load street maps.
+
+To publish your own copy, ask Claude Code to publish `claude-ai-version/index.html` as an artifact with `us-counties.json` alongside it, and the `sample` and `mcp` (Clinical Trials: `search_trials`, `get_trial_details`) capabilities.
 
 ## How to use it
 
@@ -60,7 +81,7 @@ Requests to Claude turn on Anthropic's server-side fallback (`fallbacks: "defaul
 
 ## Cost
 
-Each full run (steps 3, 5 and 6) makes three Claude requests, two of which use web search. The cost depends on how much Claude reads; check your usage at [console.anthropic.com](https://console.anthropic.com/). ClinicalTrials.gov, PubMed and the map services are free.
+Basic mode is free. In full mode, each run (steps 3, 5 and 6) makes three Claude requests, two of which use web search. The cost depends on how much Claude reads; check your usage at [console.anthropic.com](https://console.anthropic.com/). ClinicalTrials.gov, PubMed and the map services are free.
 
 ## Limitations
 
@@ -77,6 +98,7 @@ cancer_care_navigator.html        The app (HTML, CSS and JavaScript in one file)
 Start Cancer Care Navigator.bat   Windows launcher
 server.ps1                        Local web server the Windows launcher runs (localhost only)
 start.sh                          macOS / Linux launcher (Python 3)
+claude-ai-version/                No-API-key version that runs on claude.ai (index.html + us-counties.json map data)
 vendor/                           Libraries bundled so the app doesn't load code from the internet
   anthropic-sdk/                  @anthropic-ai/sdk 0.131.0 (browser ES module build)
   leaflet/                        Leaflet 1.9.4 (maps)
