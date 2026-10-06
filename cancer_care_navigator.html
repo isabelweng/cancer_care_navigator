@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cancer Care Navigator</title>
+<link rel="stylesheet" href="vendor/tabler-icons/tabler-icons.min.css">
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+<script src="vendor/leaflet/leaflet.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+[hidden]{display:none!important}
+:root{
+  --t50:#E1F5EE;--t100:#9FE1CB;--t400:#1D9E75;--t600:#0F6E56;--t800:#085041;
+  --b50:#E6F1FB;--b100:#B5D4F4;--b600:#185FA5;--b800:#0C447C;
+  --c50:#FAECE7;--c100:#F5C4B3;--c400:#D85A30;--c800:#7A2A10;
+  --a50:#FAEEDA;--a100:#FAC775;--a400:#BA7517;--a800:#633806;
+  --p50:#EEEDFE;--p100:#CECBF6;--p400:#7F77DD;--p800:#3C3489;
+  --g50:#F1EFE8;--g100:#D3D1C7;--g400:#888780;--g800:#444441;
+  --gr50:#EAF3DE;--gr400:#639922;--gr800:#27500A;
+  --bg:#f6f7f5;--card:#ffffff;--text:#1a1a1a;--text2:#5d625f;--border:rgba(0,0,0,.12);--hl:#FFF3C4;
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#161918;--card:#202423;--text:#eef1ef;--text2:#a9b0ac;--border:rgba(255,255,255,.13);--hl:#4a3f12;
+  --t50:#123a2f;--t100:#1f5c4a;--t800:#bfeedd;--b50:#14283d;--b100:#24476b;--b800:#cfe3f8;--b600:#7fb3e6;
+  --c50:#3b2018;--c100:#6b3a28;--c800:#f6c8b7;--a50:#3a2c12;--a100:#6b5320;--a800:#f7d9a2;
+  --p50:#25223f;--p100:#3e3a6b;--p800:#d7d4fb;--g50:#2a2e2c;--g100:#3b403d;--g800:#d6d8d4;--gr50:#1e2f12;--gr800:#cfe8b3;
+}}
+body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:14px;line-height:1.5}
+a{color:var(--b600)}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--t400);outline-offset:2px}
+.hdr{background:var(--t600);padding:.85rem 1.25rem;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.hdr-logo{width:34px;height:34px;background:#fff;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#0F6E56;font-size:18px}
+.hdr h1{color:#fff;font-size:17px;font-weight:600}
+.hdr p{color:rgba(255,255,255,.78);font-size:12px}
+.hdr .keybtn{margin-left:auto;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:7px;padding:5px 10px;font-size:12px;cursor:pointer}
+.keybar{background:var(--a50);border-bottom:1px solid var(--a100);padding:10px 1.25rem;font-size:12px;color:var(--a800);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.keybar input[type=password]{flex:1;min-width:220px;padding:6px 9px;border:1px solid var(--a400);border-radius:6px;background:var(--card)}
+.keybar label{display:flex;gap:5px;align-items:center}
+.snav{display:flex;background:var(--card);border-bottom:1px solid var(--border);overflow-x:auto;padding:0 1rem}
+.stab{padding:.75rem .9rem;font-size:13px;color:var(--text2);cursor:pointer;border:0;border-bottom:2px solid transparent;white-space:nowrap;display:flex;align-items:center;gap:6px;background:none}
+.stab.active{color:var(--t600);border-bottom-color:var(--t400);font-weight:600}
+@media(prefers-color-scheme:dark){.stab.active{color:var(--t100)}}
+.stab.done{color:var(--t400)}
+.sbadge{width:18px;height:18px;border-radius:50%;background:var(--g100);color:var(--g800);font-size:10px;display:flex;align-items:center;justify-content:center;font-weight:600}
+.stab.active .sbadge{background:var(--t100);color:var(--t800)}
+.stab.done .sbadge{background:var(--t400);color:#fff}
+.main{padding:1.1rem 1.25rem 2rem;max-width:1100px;margin:0 auto}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1.1rem;margin-bottom:.9rem}
+.card-hdr{display:flex;align-items:center;gap:9px;margin-bottom:.9rem;padding-bottom:.7rem;border-bottom:1px solid var(--border)}
+.card-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.card-title{font-size:15px;font-weight:600}
+.card-sub{font-size:12px;color:var(--text2)}
+.frow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+@media(max-width:640px){.frow{grid-template-columns:1fr}}
+.fg{margin-bottom:10px;min-width:0}
+.fg label{display:block;font-size:12px;color:var(--text2);margin-bottom:3px}
+.fg input,.fg select,.fg textarea{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:7px;background:var(--card)}
+.fg textarea{resize:vertical;min-height:110px}
+.btn{padding:8px 14px;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px;border:1px solid}
+.btn-p{background:var(--t600);color:#fff;border-color:var(--t600)}
+.btn-p:hover{background:var(--t800)}
+.btn-o{background:transparent;color:var(--text);border-color:var(--border)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.tag{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;white-space:nowrap}
+.tt{background:var(--t50);color:var(--t800)}.tb{background:var(--b50);color:var(--b800)}.ta{background:var(--a50);color:var(--a800)}
+.tc{background:var(--c50);color:var(--c800)}.tp{background:var(--p50);color:var(--p800)}.tg{background:var(--g50);color:var(--g800)}.tgr{background:var(--gr50);color:var(--gr800)}
+.spin{display:inline-block;width:13px;height:13px;border:2px solid var(--t100);border-top-color:var(--t400);border-radius:50%;animation:sp .7s linear infinite;flex-shrink:0}
+@keyframes sp{to{transform:rotate(360deg)}}
+.alert{border-radius:8px;padding:10px 12px;font-size:13px;display:flex;align-items:flex-start;gap:8px;margin-bottom:10px}
+.alert i{flex-shrink:0;margin-top:2px}
+.al-i{background:var(--b50);color:var(--b800)}.al-s{background:var(--t50);color:var(--t800)}.al-w{background:var(--a50);color:var(--a800)}.al-e{background:var(--c50);color:var(--c800)}
+.nftr{display:flex;justify-content:space-between;align-items:center;gap:8px;padding-top:.9rem;border-top:1px solid var(--border);margin-top:.9rem}
+.pgbar{background:var(--g100);border-radius:20px;height:3px;margin-bottom:1rem;overflow:hidden}
+.pgfill{height:100%;background:var(--t400);transition:width .4s ease}
+.slbl{font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.05em;margin-bottom:7px}
+.divider{border:none;border-top:1px solid var(--border);margin:.9rem 0}
+.map{width:100%;height:340px;border-radius:10px;border:1px solid var(--border);z-index:0}
+.map.big{height:460px}
+.sgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;font-size:13px}
+@media(max-width:640px){.sgrid{grid-template-columns:1fr}}
+.si{background:var(--bg);border-radius:7px;padding:9px 11px;min-width:0}
+.si strong{display:block;color:var(--text2);font-size:11px;margin-bottom:3px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.si ul{padding-left:16px}
+.summary-box{background:var(--t50);color:var(--t800);border-radius:9px;padding:11px 13px;margin-bottom:10px}
+.tblwrap{overflow-x:auto}
+.tbl{width:100%;border-collapse:collapse;font-size:13px;min-width:640px}
+.tbl th{text-align:left;padding:8px 10px;background:var(--g50);color:var(--text2);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--border)}
+.tbl td{padding:9px 10px;border-bottom:1px solid var(--border);vertical-align:top}
+.tbl tr.hl td{background:var(--hl)}
+.small{font-size:12px;color:var(--text2)}
+.refs a{font-size:12px;margin-right:8px;display:inline-block}
+.progress{list-style:none;display:grid;gap:6px;font-size:13px}
+.progress li{display:flex;gap:8px;align-items:center}
+.progress li.done i{color:var(--t400)}
+.progress li.fail i{color:var(--c400)}
+.trial{border:1px solid var(--border);border-radius:9px;padding:11px;margin-bottom:8px}
+.onc-layout{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:12px;align-items:start}
+@media(max-width:860px){.onc-layout{grid-template-columns:1fr}}
+.panel{border:1px solid var(--border);border-radius:10px;padding:12px;background:var(--card);position:sticky;top:10px}
+.chip{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--border);border-radius:20px;padding:2px 9px 2px 3px;margin:2px 4px 2px 0;font-size:12px;cursor:pointer;background:var(--card)}
+.chip .num,.pnum{width:20px;height:20px;border-radius:50%;color:#fff;font-size:11px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+.chip.on{border-color:var(--t400);background:var(--t50)}
+.flag{display:inline-flex;gap:4px;align-items:center;font-size:12px;font-weight:600}
+.pin{width:28px;height:28px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.35)}
+.pin span{transform:rotate(45deg);color:#fff;font-weight:700;font-size:12px}
+.pin.on{outline:3px solid #FFD54A}
+.leaflet-popup-content{font-size:13px;line-height:1.45}
+.foot{text-align:center;font-size:12px;color:var(--text2);padding:1rem 0}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <div class="hdr-logo"><i class="ti ti-heart-rate-monitor"></i></div>
+  <div>
+    <h1>Cancer Care Navigator</h1>
+    <p>NCCN guidelines · ASCO/ESMO evidence · ClinicalTrials.gov · PubMed · Oncologist matching</p>
+  </div>
+  <button class="keybtn" id="keyToggle"><i class="ti ti-key"></i> API key</button>
+</div>
+
+<div class="alert al-e" id="fileWarn" hidden style="margin:0;border-radius:0">
+  <span><b>Please start the app with the launcher.</b> Browsers block parts of this app when the file is opened directly. Close this tab and double-click <b>Start Cancer Care Navigator.bat</b> (Windows) or run <b>start.sh</b> (Mac/Linux) in the app folder.</span>
+</div>
+<script>if (location.protocol === "file:") document.getElementById("fileWarn").hidden = false;</script>
+
+<div class="keybar" id="keyBar">
+  <i class="ti ti-key"></i>
+  <span>Anthropic API key (used only from this browser to call Claude):</span>
+  <input type="password" id="apiKey" placeholder="sk-ant-..." autocomplete="off">
+  <label><input type="checkbox" id="rememberKey"> Remember on this computer</label>
+  <button class="btn btn-p" id="saveKey" style="padding:5px 12px">Save</button>
+  <span id="keyStatus">Not set. Steps 3, 5 and 6 need it.</span>
+</div>
+
+<div class="snav" role="tablist">
+  <button class="stab active" data-step="1" id="tab-1"><span class="sbadge">1</span> Insurance</button>
+  <button class="stab" data-step="2" id="tab-2"><span class="sbadge">2</span> Location</button>
+  <button class="stab" data-step="3" id="tab-3"><span class="sbadge">3</span> Disease status</button>
+  <button class="stab" data-step="4" id="tab-4"><span class="sbadge">4</span> Doctor's next steps</button>
+  <button class="stab" data-step="5" id="tab-5"><span class="sbadge">5</span> Care options</button>
+  <button class="stab" data-step="6" id="tab-6"><span class="sbadge">6</span> Oncologists</button>
+</div>
+
+<div class="main">
+  <div class="pgbar"><div class="pgfill" id="pgfill" style="width:16%"></div></div>
+
+  <!-- STEP 1.1 INSURANCE -->
+  <section id="s1">
+    <div class="card">
+      <div class="card-hdr">
+        <div class="card-icon" style="background:var(--t50);color:var(--t600)"><i class="ti ti-shield-check"></i></div>
+        <div><div class="card-title">Insurance information</div><div class="card-sub">Used to check whether each oncologist or cancer center appears to accept your coverage</div></div>
+      </div>
+      <div class="slbl">Primary insurance</div>
+      <div class="frow">
+        <div class="fg"><label for="i1c">Insurance company</label><input id="i1c" list="carriers" placeholder="e.g., Blue Shield of California"></div>
+        <div class="fg"><label for="i1t">Plan type</label><select id="i1t"></select></div>
+        <div class="fg"><label for="i1n">Plan or network name</label><input id="i1n" placeholder="e.g., Trio HMO, PPO Gold"></div>
+      </div>
+      <hr class="divider">
+      <div class="slbl">Secondary insurance (optional)</div>
+      <div class="frow">
+        <div class="fg"><label for="i2c">Insurance company</label><input id="i2c" list="carriers" placeholder="e.g., Medicare"></div>
+        <div class="fg"><label for="i2t">Plan type</label><select id="i2t"></select></div>
+        <div class="fg"><label for="i2n">Plan or network name</label><input id="i2n" placeholder="e.g., Medigap Plan G"></div>
+      </div>
+      <datalist id="carriers">
+        <option>Aetna</option><option>Anthem Blue Cross</option><option>Blue Cross Blue Shield</option><option>Blue Shield of California</option>
+        <option>Cigna</option><option>Health Net</option><option>Humana</option><option>Kaiser Permanente</option><option>Medicare</option>
+        <option>Medi-Cal</option><option>Medicaid</option><option>Molina Healthcare</option><option>Sutter Health Plus</option><option>Tricare</option>
+        <option>UnitedHealthcare</option><option>VA Community Care</option>
+      </datalist>
+      <div class="alert al-i"><i class="ti ti-lock"></i><span>No member ID is needed. The app keeps what you enter in this browser tab only and sends it to Claude solely to run your search.</span></div>
+    </div>
+    <div class="nftr"><span></span><button class="btn btn-p" data-go="2">Continue <i class="ti ti-arrow-right"></i></button></div>
+  </section>
+
+  <!-- STEP 1.2 LOCATION -->
+  <section id="s2" hidden>
+    <div class="card">
+      <div class="card-hdr">
+        <div class="card-icon" style="background:var(--b50);color:var(--b600)"><i class="ti ti-map-pin"></i></div>
+        <div><div class="card-title">Where would you like to receive care?</div><div class="card-sub">Enter a home address, or just a city, ZIP code or state</div></div>
+      </div>
+      <div class="frow" style="grid-template-columns:minmax(0,2fr) minmax(0,1fr)">
+        <div class="fg"><label for="loc">Address, city, ZIP or state</label><input id="loc" placeholder="e.g., 1 Main St, Fremont, CA · or · Fremont, CA · or · California"></div>
+        <div class="fg"><label for="dist">How far are you willing to travel?</label>
+          <select id="dist"><option value="25">Within 25 miles</option><option value="50" selected>Within 50 miles</option><option value="100">Within 100 miles</option><option value="250">Within 250 miles</option><option value="0">Any distance</option></select>
+        </div>
+      </div>
+      <div class="row" style="margin-bottom:10px">
+        <button class="btn btn-p" id="locBtn"><i class="ti ti-search"></i> Show on map</button>
+        <span id="locStatus" class="small"></span>
+      </div>
+      <div id="map1" class="map"></div>
+    </div>
+    <div class="nftr">
+      <button class="btn btn-o" data-go="1"><i class="ti ti-arrow-left"></i> Back</button>
+      <button class="btn btn-p" data-go="3">Continue <i class="ti ti-arrow-right"></i></button>
+    </div>
+  </section>
+
+  <!-- STEP 1.3 DISEASE STATUS -->
+  <section id="s3" hidden>
+    <div class="card">
+      <div class="card-hdr">
+        <div class="card-icon" style="background:var(--c50);color:var(--c400)"><i class="ti ti-file-description"></i></div>
+        <div><div class="card-title">Current disease status</div><div class="card-sub">Describe it in your own words. Claude will organize it for you.</div></div>
+      </div>
+      <div class="fg">
+        <label for="dnarr">Your disease status</label>
+        <textarea id="dnarr" style="min-height:170px" placeholder="You can include:
+• Diagnosis and stage (e.g., Stage IV breast cancer), and when it was diagnosed
+• Treatments so far and how they worked (surgery, chemotherapy, radiation, targeted therapy, immunotherapy)
+• Biomarkers or tumor mutations (e.g., ER+, HER2-, PIK3CA, EGFR, BRCA, PD-L1)
+• Current symptoms
+• Other health conditions, and side effects from treatment"></textarea>
+      </div>
+      <div class="row">
+        <button class="btn btn-p" id="analyzeBtn"><i class="ti ti-wand"></i> Organize my disease status</button>
+        <button class="btn btn-o" id="exampleBtn"><i class="ti ti-file-text"></i> Load an example</button>
+      </div>
+      <div id="dout" style="margin-top:12px"></div>
+    </div>
+    <div class="nftr">
+      <button class="btn btn-o" data-go="2"><i class="ti ti-arrow-left"></i> Back</button>
+      <button class="btn btn-p" data-go="4">Continue <i class="ti ti-arrow-right"></i></button>
+    </div>
+  </section>
+
+  <!-- STEP 1.4 DOCTOR RECS -->
+  <section id="s4" hidden>
+    <div class="card">
+      <div class="card-hdr">
+        <div class="card-icon" style="background:var(--p50);color:var(--p400)"><i class="ti ti-stethoscope"></i></div>
+        <div><div class="card-title">Next steps your doctor recommended</div><div class="card-sub">Optional. Procedures, lab tests or treatments, one per line.</div></div>
+      </div>
+      <div class="alert al-i"><i class="ti ti-info-circle"></i><span>If you leave this blank, the app suggests next steps from your disease status, NCCN guidelines, recent ASCO/ESMO evidence and recruiting clinical trials.</span></div>
+      <div class="fg"><label for="drecs">Doctor's recommendations</label>
+        <textarea id="drecs" placeholder="e.g.
+Liquid biopsy for ESR1 mutation
+Start fulvestrant + capivasertib
+Bone scan in 3 months"></textarea>
+      </div>
+    </div>
+    <div class="nftr">
+      <button class="btn btn-o" data-go="3"><i class="ti ti-arrow-left"></i> Back</button>
+      <button class="btn btn-p" id="optionsBtn"><i class="ti ti-list-search"></i> Find care options</button>
+    </div>
+  </section>
+
+  <!-- STEP 2.1 CARE OPTIONS -->
+  <section id="s5" hidden>
+    <div id="optProgress"></div>
+    <div id="optOut"></div>
+    <div class="nftr">
+      <button class="btn btn-o" data-go="4"><i class="ti ti-arrow-left"></i> Back</button>
+      <button class="btn btn-p" id="oncBtn" disabled><i class="ti ti-users"></i> Find matching oncologists</button>
+    </div>
+  </section>
+
+  <!-- STEP 2.2 ONCOLOGISTS -->
+  <section id="s6" hidden>
+    <div id="oncProgress"></div>
+    <div id="oncOut"></div>
+    <div class="nftr">
+      <button class="btn btn-o" data-go="5"><i class="ti ti-arrow-left"></i> Back to care options</button>
+      <span></span>
+    </div>
+  </section>
+
+  <div class="foot"><i class="ti ti-info-circle"></i> For information and planning only. This is not medical advice. Review every option with your oncologist before making treatment decisions.</div>
+</div>
+
+<script type="module">
+import Anthropic from "./vendor/anthropic-sdk/sdk.mjs"; // @anthropic-ai/sdk 0.131.0, bundled locally
+
+// ───────────────────────── config ─────────────────────────
+const MODEL = "claude-opus-5-5";
+const CT_API = "https://clinicaltrials.gov/api/v2/studies";
+const EUTILS = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils";
+const PIN_COLORS = ["#185FA5","#7F77DD","#BA7517","#0F6E56","#D85A30","#639922","#A2427A","#2F6DB0","#5D7A1E","#8A5A00"];
+const PLAN_TYPES = ["", "HMO", "PPO", "EPO", "POS", "Medicare Advantage", "Original Medicare", "Medigap / Supplement", "Medicaid / Medi-Cal", "Employer self-funded", "Other / not sure"];
+
+// ───────────────────────── state ─────────────────────────
+const S = { step: 1, place: null, disease: null, options: null, trials: [], pubmed: [], oncs: [], activeOnc: null };
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const safeUrl = u => /^https?:\/\//i.test(String(u || "")) ? String(u) : "";
+const link = (u, label) => safeUrl(u) ? `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(label || u)}</a>` : esc(label || "");
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+for (const id of ["i1t", "i2t"]) $(id).innerHTML = PLAN_TYPES.map(p => `<option value="${p}">${p || "Select…"}</option>`).join("");
+
+// ───────────────────────── API key ─────────────────────────
+let apiKey = "";
+try { apiKey = localStorage.getItem("ccn_apikey") || sessionStorage.getItem("ccn_apikey") || ""; $("rememberKey").checked = !!localStorage.getItem("ccn_apikey"); } catch (e) {}
+function showKeyStatus() {
+  $("keyStatus").textContent = apiKey ? "Key saved. Claude features are on." : "Not set. Steps 3, 5 and 6 need it.";
+  $("apiKey").value = apiKey;
+  if (apiKey) $("keyBar").hidden = true;
+}
+showKeyStatus();
+$("keyToggle").onclick = () => { $("keyBar").hidden = !$("keyBar").hidden; };
+$("saveKey").onclick = () => {
+  apiKey = $("apiKey").value.trim();
+  try {
+    localStorage.removeItem("ccn_apikey"); sessionStorage.removeItem("ccn_apikey");
+    if (apiKey) ($("rememberKey").checked ? localStorage : sessionStorage).setItem("ccn_apikey", apiKey);
+  } catch (e) {}
+  showKeyStatus();
+};
+
+// ───────────────────────── navigation ─────────────────────────
+function go(n) {
+  for (let i = 1; i <= 6; i++) {
+    $("s" + i).hidden = i !== n;
+    $("tab-" + i).classList.toggle("active", i === n);
+    if (i < n) $("tab-" + i).classList.add("done");
+  }
+  S.step = n;
+  $("pgfill").style.width = (n / 6 * 100) + "%";
+  window.scrollTo({ top: 0 });
+  if (n === 2) setTimeout(() => map1.invalidateSize(), 50);
+  if (n === 6 && map2) setTimeout(() => map2.invalidateSize(), 50);
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-go],[data-step]");
+  if (b) go(+(b.dataset.go || b.dataset.step));
+});
+
+// ───────────────────────── maps ─────────────────────────
+// Esri street tiles work from a file:// page (no referrer needed) and need no key.
+const TILE = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}";
+const TILE_ATTR = 'Tiles &copy; Esri, HERE, Garmin, &copy; OpenStreetMap contributors';
+function makeMap(el) {
+  const m = L.map(el, { scrollWheelZoom: false }).setView([39.5, -98.35], 4);
+  L.tileLayer(TILE, { attribution: TILE_ATTR, maxZoom: 19 }).addTo(m);
+  return m;
+}
+const map1 = makeMap("map1");
+let map1Layer = L.layerGroup().addTo(map1);
+let map2 = null, map2Layer = null;
+const homeIcon = () => L.divIcon({ className: "", html: `<div class="pin" style="background:#1D9E75"><span>★</span></div>`, iconSize: [28, 28], iconAnchor: [14, 28], popupAnchor: [0, -26] });
+const numIcon = (n, color, on) => L.divIcon({ className: "", html: `<div class="pin${on ? " on" : ""}" style="background:${color}"><span>${n}</span></div>`, iconSize: [28, 28], iconAnchor: [14, 28], popupAnchor: [0, -26] });
+
+// ───────────────────────── geocoding ─────────────────────────
+async function geocode(q) {
+  const u = "https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=1&countrycodes=us&q=" + encodeURIComponent(q);
+  try {
+    const r = await fetch(u, { headers: { "Accept-Language": "en" } });
+    const d = await r.json();
+    if (d[0]) return { lat: +d[0].lat, lng: +d[0].lon, label: d[0].display_name, type: d[0].addresstype || d[0].type };
+  } catch (e) {}
+  try {
+    const r = await fetch("https://photon.komoot.io/api/?limit=1&q=" + encodeURIComponent(q));
+    const d = await r.json();
+    const f = d.features?.[0];
+    if (f) return { lat: f.geometry.coordinates[1], lng: f.geometry.coordinates[0], label: [f.properties.name, f.properties.city, f.properties.state].filter(Boolean).join(", "), type: f.properties.type };
+  } catch (e) {}
+  return null;
+}
+function miles(a, b) {
+  const R = 3958.8, toR = x => x * Math.PI / 180;
+  const dLat = toR(b.lat - a.lat), dLng = toR(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(toR(a.lat)) * Math.cos(toR(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+const radius = () => +$("dist").value || 0;
+
+async function locate() {
+  const q = $("loc").value.trim();
+  if (!q) { $("locStatus").textContent = "Enter an address, city, ZIP code or state."; return null; }
+  $("locStatus").innerHTML = `<span class="spin"></span> Finding ${esc(q)}…`;
+  const p = await geocode(q);
+  if (!p) { $("locStatus").textContent = "Couldn't find that place. Try adding the city and state."; return null; }
+  S.place = { ...p, query: q };
+  $("locStatus").innerHTML = `<i class="ti ti-circle-check" style="color:var(--t400)"></i> ${esc(p.label)}`;
+  drawMap1();
+  return S.place;
+}
+function drawMap1() {
+  map1Layer.clearLayers();
+  map1.invalidateSize();
+  if (!S.place) return;
+  const ll = [S.place.lat, S.place.lng];
+  L.marker(ll, { icon: homeIcon() }).addTo(map1Layer).bindPopup("<b>Your preferred location</b><br>" + esc(S.place.label));
+  const r = radius();
+  if (r) {
+    const c = L.circle(ll, { radius: r * 1609.34, color: "#1D9E75", weight: 1.5, fillOpacity: .06 }).addTo(map1Layer);
+    map1.fitBounds(c.getBounds(), { padding: [10, 10] });
+  } else map1.setView(ll, S.place.type === "state" ? 6 : 10);
+}
+$("locBtn").onclick = locate;
+$("loc").addEventListener("keydown", e => { if (e.key === "Enter") locate(); });
+$("dist").onchange = drawMap1;
+
+// ───────────────────────── Claude ─────────────────────────
+function client() {
+  if (!apiKey) { $("keyBar").hidden = false; throw new Error("Add your Anthropic API key at the top of the page first."); }
+  return new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
+}
+function explainError(e) {
+  if (e instanceof Anthropic.AuthenticationError) return "Your API key was rejected. Check it at the top of the page.";
+  if (e instanceof Anthropic.RateLimitError) return "The Claude API rate limit was reached. Wait a minute and try again.";
+  if (e instanceof Anthropic.APIConnectionError) return "Couldn't reach the Claude API. Check your internet connection.";
+  if (e instanceof Anthropic.APIError) return `Claude API error ${e.status}: ${e.message}`;
+  return e?.message || String(e);
+}
+
+// One Claude request: adaptive thinking, optional web search, server-side refusal fallback, pause_turn resume.
+async function askClaude({ system, prompt, schema, web = 0, effort = "medium" }) {
+  const c = client();
+  const messages = [{ role: "user", content: prompt }];
+  const params = {
+    model: MODEL, max_tokens: 32000, system, messages,
+    thinking: { type: "adaptive" },
+    output_config: schema ? { effort, format: { type: "json_schema", schema } } : { effort },
+    betas: ["server-side-fallback-2026-07-01"], fallbacks: "default",
+  };
+  if (web) params.tools = [{ type: "web_search_20260209", name: "web_search", max_uses: web }];
+  const sources = new Map();
+  let msg;
+  for (let turn = 0; turn < 5; turn++) {
+    msg = await c.beta.messages.stream(params).finalMessage();
+    for (const b of msg.content) {
+      if (b.type === "web_search_tool_result" && Array.isArray(b.content))
+        for (const r of b.content) if (r.url) sources.set(r.url, r.title || r.url);
+    }
+    if (msg.stop_reason === "pause_turn") { messages.push({ role: "assistant", content: msg.content }); continue; }
+    break;
+  }
+  if (msg.stop_reason === "refusal") throw new Error("Claude declined this request. Try rewording the disease description.");
+  if (msg.stop_reason === "max_tokens") throw new Error("Claude's answer was too long and got cut off. Try again.");
+  const text = msg.content.filter(b => b.type === "text").map(b => b.text).join("");
+  return { data: parseJson(text), sources: [...sources].map(([url, title]) => ({ url, title })) };
+}
+function parseJson(text) {
+  const fence = [...text.matchAll(/```json\s*([\s\S]*?)```/g)].pop();
+  const body = fence ? fence[1] : text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1);
+  try { return JSON.parse(body); } catch (e) { throw new Error("Claude's answer couldn't be read. Try again."); }
+}
+
+// ───────────────────────── Step 1.3: structure disease status ─────────────────────────
+const strArr = { type: "array", items: { type: "string" } };
+const DISEASE_SCHEMA = {
+  type: "object", additionalProperties: false,
+  required: ["diagnosis", "cancer_type", "histology", "stage", "diagnosed", "metastatic_sites", "biomarkers", "prior_treatments", "current_status", "symptoms", "comorbidities", "side_effects", "performance_status", "summary", "missing_info", "search"],
+  properties: {
+    diagnosis: { type: "string" }, cancer_type: { type: "string" }, histology: { type: "string" }, stage: { type: "string" }, diagnosed: { type: "string" },
+    metastatic_sites: strArr,
+    biomarkers: { type: "array", items: { type: "object", additionalProperties: false, required: ["name", "result"], properties: { name: { type: "string" }, result: { type: "string" } } } },
+    prior_treatments: { type: "array", items: { type: "object", additionalProperties: false, required: ["treatment", "type", "when", "outcome"], properties: { treatment: { type: "string" }, type: { type: "string" }, when: { type: "string" }, outcome: { type: "string" } } } },
+    current_status: { type: "string" }, symptoms: strArr, comorbidities: strArr, side_effects: strArr, performance_status: { type: "string" },
+    summary: { type: "string" }, missing_info: strArr,
+    search: { type: "object", additionalProperties: false, required: ["condition", "keywords"], properties: { condition: { type: "string" }, keywords: strArr } },
+  },
+};
+const EXAMPLE = `I was diagnosed with ER-positive, PR-positive, HER2-negative invasive ductal breast cancer in 2019 (Stage IIA) and had a lumpectomy, radiation and 5 years of letrozole planned.
+In March 2025 a scan showed it had spread to my bones (spine and pelvis) and liver. Biopsy of the liver confirmed ER+/HER2-low (IHC 1+). Genomic testing found a PIK3CA mutation (H1047R).
+I started palbociclib plus fulvestrant in April 2025. My latest scan in August 2026 shows the liver spots are growing again.
+Symptoms: lower back pain, mild fatigue. Side effects: low white counts on palbociclib. Other conditions: type 2 diabetes (controlled with metformin), osteopenia. I'm still working part-time.`;
+$("exampleBtn").onclick = () => { $("dnarr").value = EXAMPLE; };
+
+$("analyzeBtn").onclick = async () => {
+  const narr = $("dnarr").value.trim();
+  if (!narr) { $("dout").innerHTML = `<div class="alert al-w"><i class="ti ti-alert-triangle"></i>Describe your disease status first.</div>`; return; }
+  const btn = $("analyzeBtn"); btn.disabled = true; btn.innerHTML = `<span class="spin"></span> Organizing…`;
+  $("dout").innerHTML = "";
+  try {
+    const { data } = await askClaude({
+      system: "You are an oncology nurse navigator. Organize a patient's own description of their cancer into structured fields, using plain language a patient understands. Use only what the patient wrote; never invent results. Use an empty string or empty list when something wasn't mentioned. In missing_info, list the specific details an oncologist would want that the patient didn't mention. In search.condition put the standard cancer name for a ClinicalTrials.gov condition search (e.g., 'Breast Cancer'); in search.keywords put 2-5 short terms (biomarkers, setting) useful for finding matching trials.",
+      prompt: narr, schema: DISEASE_SCHEMA, effort: "medium",
+    });
+    S.disease = data;
+    $("dout").innerHTML = renderDisease(data);
+  } catch (e) {
+    $("dout").innerHTML = `<div class="alert al-e"><i class="ti ti-alert-circle"></i>${esc(explainError(e))}</div>`;
+  }
+  btn.disabled = false; btn.innerHTML = `<i class="ti ti-wand"></i> Organize again`;
+};
+function list(a) { return a?.length ? `<ul>${a.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : `<span class="small">None mentioned</span>`; }
+function renderDisease(d) {
+  return `<div class="summary-box"><b>Summary.</b> ${esc(d.summary)}</div>
+  <div class="sgrid">
+    <div class="si"><strong>Diagnosis</strong>${esc(d.diagnosis || "—")}${d.histology ? `<div class="small">${esc(d.histology)}</div>` : ""}</div>
+    <div class="si"><strong>Stage</strong>${esc(d.stage || "—")}${d.diagnosed ? `<div class="small">Diagnosed ${esc(d.diagnosed)}</div>` : ""}</div>
+    <div class="si"><strong>Where it has spread</strong>${list(d.metastatic_sites)}</div>
+    <div class="si"><strong>Biomarkers and mutations</strong>${d.biomarkers?.length ? d.biomarkers.map(b => `<span class="tag tb" style="margin:2px 4px 2px 0">${esc(b.name)}: ${esc(b.result)}</span>`).join("") : `<span class="small">None mentioned</span>`}</div>
+    <div class="si" style="grid-column:1/-1"><strong>Treatment history</strong>${d.prior_treatments?.length ? `<div class="tblwrap"><table class="tbl" style="min-width:0"><thead><tr><th>Treatment</th><th>Type</th><th>When</th><th>Outcome</th></tr></thead><tbody>${d.prior_treatments.map(t => `<tr><td>${esc(t.treatment)}</td><td>${esc(t.type)}</td><td>${esc(t.when)}</td><td>${esc(t.outcome)}</td></tr>`).join("")}</tbody></table></div>` : `<span class="small">None mentioned</span>`}</div>
+    <div class="si"><strong>Current status</strong>${esc(d.current_status || "—")}</div>
+    <div class="si"><strong>Activity level</strong>${esc(d.performance_status || "—")}</div>
+    <div class="si"><strong>Symptoms</strong>${list(d.symptoms)}</div>
+    <div class="si"><strong>Side effects</strong>${list(d.side_effects)}</div>
+    <div class="si"><strong>Other conditions</strong>${list(d.comorbidities)}</div>
+    <div class="si"><strong>Worth adding or asking your doctor</strong>${list(d.missing_info)}</div>
+  </div>`;
+}
+
+// ───────────────────────── progress helper ─────────────────────────
+function progress(el, steps) {
+  el.innerHTML = `<div class="card"><ul class="progress">${steps.map((s, i) => `<li id="${el.id}-${i}"><span class="spin" hidden></span><i class="ti ti-circle"></i> ${esc(s)}</li>`).join("")}</ul></div>`;
+  const li = i => $(`${el.id}-${i}`);
+  return {
+    start(i) { li(i).querySelector(".spin").hidden = false; li(i).querySelector("i").hidden = true; },
+    done(i, note = "") { const l = li(i); l.className = "done"; l.querySelector(".spin").hidden = true; const ic = l.querySelector("i"); ic.hidden = false; ic.className = "ti ti-circle-check"; if (note) l.insertAdjacentHTML("beforeend", ` <span class="small">${esc(note)}</span>`); },
+    fail(i, note = "") { const l = li(i); l.className = "fail"; l.querySelector(".spin").hidden = true; const ic = l.querySelector("i"); ic.hidden = false; ic.className = "ti ti-alert-circle"; if (note) l.insertAdjacentHTML("beforeend", ` <span class="small">${esc(note)}</span>`); },
+  };
+}
+
+// ───────────────────────── live data: ClinicalTrials.gov ─────────────────────────
+async function ctSearch(params) {
+  const u = new URL(CT_API);
+  for (const [k, v] of Object.entries(params)) if (v) u.searchParams.set(k, v);
+  const r = await fetch(u);
+  if (!r.ok) throw new Error("ClinicalTrials.gov returned " + r.status);
+  return r.json();
+}
+function compactTrial(s) {
+  const p = s.protocolSection || {};
+  const locs = (p.contactsLocationsModule?.locations || []).map(l => ({
+    facility: l.facility, city: l.city, state: l.state, zip: l.zip, status: l.status,
+    lat: l.geoPoint?.lat, lng: l.geoPoint?.lon,
+    pis: (l.contacts || []).filter(c => c.role === "PRINCIPAL_INVESTIGATOR").map(c => c.name),
+  }));
+  const near = S.place ? locs.filter(l => l.lat != null).map(l => ({ ...l, mi: miles(S.place, { lat: l.lat, lng: l.lng }) })).sort((a, b) => a.mi - b.mi) : [];
+  return {
+    nct: p.identificationModule?.nctId, title: p.identificationModule?.briefTitle,
+    phase: (p.designModule?.phases || []).join("/").replace(/PHASE/g, "Phase ").replace(/EARLY_/g, "Early ") || "N/A",
+    status: p.statusModule?.overallStatus, sponsor: p.sponsorCollaboratorsModule?.leadSponsor?.name,
+    conditions: p.conditionsModule?.conditions || [], interventions: (p.armsInterventionsModule?.interventions || []).map(i => i.name),
+    summary: (p.descriptionModule?.briefSummary || "").slice(0, 700),
+    eligibility: (p.eligibilityModule?.eligibilityCriteria || "").slice(0, 1800),
+    officials: (p.contactsLocationsModule?.overallOfficials || []).map(o => o.name),
+    nearest: near.slice(0, 3), siteCount: locs.length,
+  };
+}
+async function findTrials(d) {
+  const cond = d.search?.condition || d.cancer_type || d.diagnosis;
+  const kw = (d.search?.keywords || []).filter(Boolean);
+  const r = radius();
+  const geo = S.place && r ? `distance(${S.place.lat.toFixed(4)},${S.place.lng.toFixed(4)},${r}mi)` : "";
+  const base = { "query.cond": cond, "filter.overallStatus": "RECRUITING", pageSize: 40, countTotal: "true" };
+  const attempts = [
+    { ...base, "query.term": kw.join(" OR "), "filter.geo": geo },
+    { ...base, "filter.geo": geo },
+    { ...base, "query.term": kw.join(" OR ") },
+  ];
+  for (const a of attempts) {
+    const res = await ctSearch(a);
+    if ((res.studies || []).length >= 5 || a === attempts[attempts.length - 1]) return (res.studies || []).map(compactTrial);
+  }
+  return [];
+}
+
+// ───────────────────────── live data: PubMed ─────────────────────────
+async function pubmedSearch(term, retmax = 8, sort = "relevance") {
+  const s = await (await fetch(`${EUTILS}/esearch.fcgi?db=pubmed&retmode=json&sort=${sort}&retmax=${retmax}&term=${encodeURIComponent(term)}`)).json();
+  const ids = s.esearchresult?.idlist || [];
+  const count = +(s.esearchresult?.count || 0);
+  if (!ids.length) return { count, items: [] };
+  await sleep(350);
+  const sum = await (await fetch(`${EUTILS}/esummary.fcgi?db=pubmed&retmode=json&id=${ids.join(",")}`)).json();
+  const items = ids.map(id => sum.result?.[id]).filter(Boolean).map(r => ({
+    pmid: r.uid, title: r.title, journal: r.fulljournalname || r.source, date: r.pubdate,
+    authors: (r.authors || []).slice(0, 3).map(a => a.name).join(", ") + ((r.authors || []).length > 3 ? " et al." : ""),
+    url: `https://pubmed.ncbi.nlm.nih.gov/${r.uid}/`,
+  }));
+  return { count, items };
+}
+async function pubmedAbstracts(ids) {
+  if (!ids.length) return {};
+  const xml = await (await fetch(`${EUTILS}/efetch.fcgi?db=pubmed&retmode=xml&id=${ids.join(",")}`)).text();
+  const doc = new DOMParser().parseFromString(xml, "text/xml");
+  const out = {};
+  for (const a of doc.querySelectorAll("PubmedArticle")) {
+    const id = a.querySelector("PMID")?.textContent;
+    out[id] = [...a.querySelectorAll("AbstractText")].map(t => t.textContent).join(" ").slice(0, 1500);
+  }
+  return out;
+}
+async function findEvidence(d) {
+  const cond = d.search?.condition || d.cancer_type;
+  const kw = (d.search?.keywords || []).slice(0, 3);
+  const year = new Date().getFullYear();
+  const term = `(${cond}[Title/Abstract])${kw.length ? ` AND (${kw.map(k => `"${k}"[Title/Abstract]`).join(" OR ")})` : ""} AND (${year - 2}:${year}[dp]) AND (clinical trial[pt] OR review[pt] OR "ASCO"[Title/Abstract] OR "ESMO"[Title/Abstract])`;
+  let res = await pubmedSearch(term, 10);
+  if (!res.items.length) { await sleep(350); res = await pubmedSearch(`${cond}[Title/Abstract] AND (${year - 2}:${year}[dp])`, 10); }
+  await sleep(350);
+  const abs = await pubmedAbstracts(res.items.map(i => i.pmid));
+  return res.items.map(i => ({ ...i, abstract: abs[i.pmid] || "" }));
+}
+
+// ───────────────────────── Step 2.1: care options ─────────────────────────
+function insuranceText() {
+  const one = (c, t, n) => [ $(c).value, $(t).value, $(n).value ].filter(Boolean).join(" · ");
+  return { primary: one("i1c", "i1t", "i1n") || "Not provided", secondary: one("i2c", "i2t", "i2n") || "None" };
+}
+const OPTIONS_SYSTEM = `You are an oncology care-navigation research assistant helping a patient prepare for a conversation with their oncologist. You produce a structured list of next-step options (treatments, procedures, tests) with honest sourcing.
+
+Sources to use:
+1. NCCN guidelines: identify standard-of-care options that match the patient's disease status. Use web search to confirm the current NCCN guideline version and recommendation category where you can (nccn.org summaries, NCCN patient guidelines, published guideline updates). Name the guideline and version you relied on.
+2. Emerging evidence: search for recent data relevant to this disease status, especially ASCO and ESMO 2025-2026 presentations, FDA approvals, and the PubMed articles provided. Cite each with a URL.
+3. Clinical trials: choose the TOP THREE trials ONLY from the provided recruiting ClinicalTrials.gov candidates (never invent NCT numbers). Prefer trials whose eligibility fits the patient and that have a site near the patient. Note any eligibility concerns.
+4. Doctor's recommendations: include every item the patient's doctor recommended as its own option with source "Doctor". If a doctor item is also supported by NCCN or emerging evidence, include those sources too on the same option rather than duplicating it.
+
+Write rationale in plain language. Never present an option as a decision; the patient's oncologist decides. Do not invent biomarker results.
+
+When you are done, end your reply with ONE JSON object in a \`\`\`json fence with this shape:
+{"options":[{"id":"O1","option":"short name of treatment, test or procedure","kind":"treatment|test|procedure|supportive care","sources":["NCCN","Emerging","Trial","Doctor"],"rationale":"1-3 sentences on why it may fit","nccn_reference":"guideline + version + category, or empty","evidence":[{"label":"short citation","url":"https://..."}],"nct_id":"NCT number when sources includes Trial, else empty","priority":"high|medium|low","fit_notes":"what must be true / what to confirm first"}],
+"top_trials":[{"nct_id":"","why_match":"","eligibility_concerns":""}],
+"questions_for_doctor":["..."]}
+Number option ids O1, O2, ... Include the three top trials as options with source "Trial".`;
+
+$("optionsBtn").onclick = runOptions;
+async function runOptions() {
+  go(5);
+  $("optOut").innerHTML = ""; $("oncBtn").disabled = true;
+  const narr = $("dnarr").value.trim();
+  if (!narr) { $("optProgress").innerHTML = `<div class="alert al-w"><i class="ti ti-alert-triangle"></i>Add your disease status in step 3 first.</div>`; return; }
+  const P = progress($("optProgress"), ["Organize disease status", "Confirm your location", "Search recruiting trials on ClinicalTrials.gov", "Search recent research on PubMed", "Review NCCN guidelines and ASCO/ESMO evidence with Claude (1–3 minutes)"]);
+  try {
+    P.start(0);
+    if (!S.disease) { $("analyzeBtn").click(); while ($("analyzeBtn").disabled) await sleep(300); }
+    if (!S.disease) throw new Error("Couldn't organize the disease status. See step 3.");
+    P.done(0, S.disease.diagnosis);
+
+    P.start(1);
+    if (!S.place && $("loc").value.trim()) await locate();
+    S.place ? P.done(1, S.place.label) : P.fail(1, "No location set. Trials won't be filtered by distance.");
+
+    P.start(2);
+    try { S.trials = await findTrials(S.disease); P.done(2, `${S.trials.length} recruiting trials found`); }
+    catch (e) { S.trials = []; P.fail(2, e.message); }
+
+    P.start(3);
+    try { S.pubmed = await findEvidence(S.disease); P.done(3, `${S.pubmed.length} recent articles`); }
+    catch (e) { S.pubmed = []; P.fail(3, "PubMed didn't respond"); }
+
+    P.start(4);
+    const trialBrief = S.trials.slice(0, 30).map(t => ({ nct: t.nct, title: t.title, phase: t.phase, sponsor: t.sponsor, interventions: t.interventions, eligibility: t.eligibility, nearest_sites: t.nearest.map(n => `${n.facility}, ${n.city} ${n.state} (${Math.round(n.mi)} mi)`) }));
+    const prompt = `PATIENT DISEASE STATUS (structured):\n${JSON.stringify(S.disease, null, 1)}\n\nPATIENT'S OWN WORDS:\n${narr}\n\nDOCTOR-RECOMMENDED NEXT STEPS:\n${$("drecs").value.trim() || "(none provided — suggest next steps yourself)"}\n\nPATIENT LOCATION: ${S.place?.label || "not provided"}; willing to travel ${radius() ? radius() + " miles" : "any distance"}.\n\nRECRUITING CLINICAL TRIAL CANDIDATES (ClinicalTrials.gov, live):\n${JSON.stringify(trialBrief)}\n\nRECENT PUBMED ARTICLES (live):\n${JSON.stringify(S.pubmed.map(p => ({ pmid: p.pmid, title: p.title, journal: p.journal, date: p.date, url: p.url, abstract: p.abstract })))}`;
+    const { data, sources } = await askClaude({ system: OPTIONS_SYSTEM, prompt, web: 8, effort: "high" });
+    S.options = data; S.optionSources = sources;
+    P.done(4, `${data.options?.length || 0} options`);
+    $("optOut").innerHTML = renderOptions(data, sources);
+    $("oncBtn").disabled = !(data.options || []).length;
+  } catch (e) {
+    $("optOut").innerHTML = `<div class="alert al-e"><i class="ti ti-alert-circle"></i>${esc(explainError(e))}</div>`;
+  }
+}
+const SRC_CLASS = { NCCN: "tt", Emerging: "tb", Trial: "tp", Doctor: "tgr" };
+const SRC_LABEL = { NCCN: "NCCN guideline", Emerging: "Emerging evidence", Trial: "Clinical trial", Doctor: "Your doctor" };
+const srcTags = s => (s || []).map(x => `<span class="tag ${SRC_CLASS[x] || "tg"}" style="margin:1px 3px 1px 0">${esc(SRC_LABEL[x] || x)}</span>`).join("");
+const PRI = { high: "tc", medium: "ta", low: "tt" };
+
+function renderOptions(d, sources) {
+  const opts = d.options || [];
+  const trials = (d.top_trials || []).map(t => ({ ...t, data: S.trials.find(x => x.nct === t.nct_id) })).filter(t => t.data);
+  const counts = {}; opts.forEach(o => (o.sources || []).forEach(s => counts[s] = (counts[s] || 0) + 1));
+  return `<div class="alert al-s"><i class="ti ti-circle-check"></i><span>${opts.length} next-step options for <b>${esc(S.disease.diagnosis)}</b>: ${Object.entries(counts).map(([k, v]) => `${v} ${esc(SRC_LABEL[k] || k).toLowerCase()}`).join(", ")}. Bring this list to your oncologist.</span></div>
+  <div class="card">
+    <div class="card-hdr"><div class="card-icon" style="background:var(--t50);color:var(--t600)"><i class="ti ti-list-check"></i></div>
+      <div><div class="card-title">Recommended next steps</div><div class="card-sub">Each option shows where the recommendation comes from</div></div></div>
+    <div class="tblwrap"><table class="tbl"><thead><tr><th style="width:30%">Option</th><th style="width:16%">Source</th><th style="width:8%">Priority</th><th>Why it may fit · what to confirm</th><th style="width:18%">References</th></tr></thead><tbody>
+    ${opts.map(o => `<tr><td><b>${esc(o.option)}</b><div class="small">${esc(o.kind || "")}${o.nct_id ? ` · ${link("https://clinicaltrials.gov/study/" + o.nct_id, o.nct_id)}` : ""}</div></td>
+      <td>${srcTags(o.sources)}</td><td><span class="tag ${PRI[o.priority] || "tg"}">${esc(o.priority || "")}</span></td>
+      <td>${esc(o.rationale)}${o.fit_notes ? `<div class="small" style="margin-top:3px"><b>Confirm:</b> ${esc(o.fit_notes)}</div>` : ""}${o.nccn_reference ? `<div class="small"><b>NCCN:</b> ${esc(o.nccn_reference)}</div>` : ""}</td>
+      <td class="refs">${(o.evidence || []).map(e => link(e.url, e.label)).join("")}</td></tr>`).join("")}
+    </tbody></table></div>
+  </div>
+  <div class="card">
+    <div class="card-hdr"><div class="card-icon" style="background:var(--p50);color:var(--p400)"><i class="ti ti-flask"></i></div>
+      <div><div class="card-title">Top 3 matching clinical trials</div><div class="card-sub">Recruiting now on ClinicalTrials.gov · ${S.trials.length} candidates reviewed</div></div></div>
+    ${trials.length ? trials.map(t => `<div class="trial">
+      <div class="row" style="justify-content:space-between"><b>${esc(t.data.title)}</b><span class="tag tp">${esc(t.data.phase)}</span></div>
+      <div class="small">${esc(t.data.sponsor || "")} · ${t.data.siteCount} sites · ${link("https://clinicaltrials.gov/study/" + t.nct_id, t.nct_id)}</div>
+      <div style="margin-top:6px"><b>Why it may match:</b> ${esc(t.why_match)}</div>
+      ${t.eligibility_concerns ? `<div class="small" style="margin-top:3px"><b>Check eligibility:</b> ${esc(t.eligibility_concerns)}</div>` : ""}
+      ${t.data.nearest.length ? `<div class="small" style="margin-top:3px"><i class="ti ti-map-pin"></i> Nearest site: ${esc(t.data.nearest[0].facility)}, ${esc(t.data.nearest[0].city)} (${Math.round(t.data.nearest[0].mi)} mi)${t.data.nearest[0].pis.length ? ` · PI: ${esc(t.data.nearest[0].pis.join(", "))}` : ""}</div>` : ""}
+    </div>`).join("") : `<div class="alert al-w"><i class="ti ti-info-circle"></i>No recruiting trial matched well. Ask your oncologist about trials at nearby cancer centers.</div>`}
+  </div>
+  ${(d.questions_for_doctor || []).length ? `<div class="card"><div class="card-hdr"><div class="card-icon" style="background:var(--b50);color:var(--b600)"><i class="ti ti-message-question"></i></div><div><div class="card-title">Questions to ask your oncologist</div></div></div>${list(d.questions_for_doctor)}</div>` : ""}
+  <details class="card"><summary style="cursor:pointer;font-weight:600">Sources consulted (${S.pubmed.length} PubMed articles, ${sources.length} web pages)</summary>
+    <div style="margin-top:8px" class="small">${S.pubmed.map(p => `<div>• ${link(p.url, p.title)} <span>${esc(p.journal)} ${esc(p.date)}</span></div>`).join("")}${sources.map(s => `<div>• ${link(s.url, s.title)}</div>`).join("")}</div>
+  </details>`;
+}
+
+// ───────────────────────── Step 2.2: oncologists ─────────────────────────
+const ONC_SYSTEM = `You are an oncology care-navigation researcher. Find oncologists or oncology teams who could provide the patient's next-step options, near the patient's preferred location and within their travel distance.
+
+Method:
+1. Start from the clinical-trial site investigators provided (they are leading recruiting trials) and add oncologists found by web searching cancer centers near the patient (NCI-designated centers, academic centers, large community oncology groups) whose focus matches the patient's cancer.
+2. Open each oncologist's public profile page (hospital or practice website) to confirm specialty, disease focus, affiliated institution, practice address, phone, and training dates. Estimate years of experience from medical school or fellowship completion year and say what you based it on; leave it empty if unknown.
+3. Search for each oncologist's recent ASCO and ESMO presentations or leadership roles and cite them.
+4. Decide which of the patient's options (by id) each oncologist or team can likely provide, e.g. trial options only at a participating site, radiation options only with a radiation oncologist on the team.
+5. Check whether the institution appears to accept the patient's insurance (the institution's accepted-plans page, the insurer's directory, or Medicare participation). Use "accepted" only with a source; "not_accepted" if a source says so; otherwise "unconfirmed".
+
+Return 6 to 10 entries, nearest and best matched first. Every entry must match at least one option. Never invent people, URLs or addresses; only include people whose profile you actually found.
+
+End your reply with ONE JSON object in a \`\`\`json fence:
+{"oncologists":[{"name":"Dr. First Last","credentials":"MD, PhD","is_team":false,"institution":"","department":"","address":"street, city, state ZIP","phone":"","profile_url":"https://...","specialty":"","focus":"disease focus in a few words","years_experience":"e.g. 15+ years","experience_basis":"e.g. MD 2008, fellowship 2014","option_ids":["O1"],"option_rationale":"why they can provide those options","conference_activity":[{"label":"ASCO 2026 oral abstract on ...","url":"https://..."}],"insurance":{"status":"accepted|not_accepted|unconfirmed","note":"","url":""}}]}`;
+
+$("oncBtn").onclick = runOncologists;
+async function runOncologists() {
+  go(6);
+  $("oncOut").innerHTML = "";
+  const P = progress($("oncProgress"), ["Collect trial investigators near you", "Search oncologist profiles, ASCO/ESMO activity and insurance with Claude (2–4 minutes)", "Check each oncologist's PubMed publications", "Check recruiting trials each oncologist leads", "Map practice locations and distances"]);
+  try {
+    P.start(0);
+    const opts = S.options.options || [];
+    const trialIds = new Set(opts.map(o => o.nct_id).filter(Boolean));
+    const r = radius();
+    const pis = [];
+    for (const t of S.trials.filter(t => trialIds.has(t.nct))) {
+      for (const n of t.nearest) if (n.pis.length && (!r || n.mi <= r)) pis.push({ nct: t.nct, pis: n.pis, facility: n.facility, city: n.city, state: n.state, miles: Math.round(n.mi) });
+    }
+    P.done(0, `${pis.length} trial sites with named investigators`);
+
+    P.start(1);
+    const ins = insuranceText();
+    const prompt = `PATIENT: ${S.disease.summary}\nDiagnosis: ${S.disease.diagnosis}; stage: ${S.disease.stage}; biomarkers: ${(S.disease.biomarkers || []).map(b => b.name + " " + b.result).join(", ")}\n\nNEXT-STEP OPTIONS:\n${JSON.stringify(opts.map(o => ({ id: o.id, option: o.option, sources: o.sources, nct_id: o.nct_id })))}\n\nPREFERRED LOCATION: ${S.place?.label || $("loc").value || "not provided"}; travel limit: ${r ? r + " miles" : "any distance"}.\n\nINSURANCE: primary ${ins.primary}; secondary ${ins.secondary}.\n\nTRIAL SITE INVESTIGATORS NEAR THE PATIENT (ClinicalTrials.gov, live):\n${JSON.stringify(pis)}`;
+    const { data, sources } = await askClaude({ system: ONC_SYSTEM, prompt, web: 25, effort: "high" });
+    let oncs = (data.oncologists || []).filter(o => (o.option_ids || []).length);
+    P.done(1, `${oncs.length} oncologists or teams matched`);
+
+    const cancer = (S.disease.search?.condition || S.disease.cancer_type || "cancer").replace(/[()]/g, "");
+    P.start(2);
+    for (const o of oncs) {
+      const nm = personName(o.name);
+      if (o.is_team || !nm) { o.pubmed = null; continue; }
+      try { o.pubmed = await pubmedSearch(`${nm.last} ${nm.first[0]}[Author] AND ${cancer}[Title/Abstract]`, 3, "pub_date"); } catch (e) { o.pubmed = null; }
+      await sleep(400);
+    }
+    P.done(2);
+
+    P.start(3);
+    for (const o of oncs) {
+      const nm = personName(o.name);
+      if (o.is_team || !nm) { o.trialsLed = []; continue; }
+      const q = `AREA[OverallOfficialName](${nm.first} AND ${nm.last}) OR AREA[LocationContactName](${nm.first} AND ${nm.last})`;
+      try {
+        const res = await ctSearch({ "query.term": q, "filter.overallStatus": "RECRUITING", pageSize: 5, fields: "NCTId,BriefTitle,Phase" });
+        o.trialsLed = (res.studies || []).map(s => ({ nct: s.protocolSection.identificationModule.nctId, title: s.protocolSection.identificationModule.briefTitle }));
+      } catch (e) { o.trialsLed = []; }
+    }
+    P.done(3);
+
+    P.start(4);
+    for (const o of oncs) {
+      let g = o.address ? await geocode(o.address) : null;
+      if (!g && o.institution) { await sleep(1100); g = await geocode(o.institution + (o.address ? ", " + o.address.split(",").slice(-2).join(",") : "")); }
+      if (g) { o.lat = g.lat; o.lng = g.lng; o.miles = S.place ? miles(S.place, g) : null; }
+      await sleep(1100);
+    }
+    oncs.sort((a, b) => (a.miles ?? 1e9) - (b.miles ?? 1e9));
+    oncs.forEach((o, i) => { o.n = i + 1; o.color = PIN_COLORS[i % PIN_COLORS.length]; o.outside = r && o.miles != null && o.miles > r; });
+    P.done(4, `${oncs.filter(o => o.lat != null).length} of ${oncs.length} mapped`);
+    S.oncs = oncs; S.oncSources = sources;
+    renderOncologists();
+  } catch (e) {
+    $("oncOut").innerHTML = `<div class="alert al-e"><i class="ti ti-alert-circle"></i>${esc(explainError(e))}</div>`;
+  }
+}
+function personName(full) {
+  const parts = String(full || "").replace(/^Dr\.?\s+/i, "").replace(/,.*$/, "").replace(/\b[A-Z]\.\s*/g, "").trim().split(/\s+/).filter(Boolean);
+  if (parts.length < 2) return null;
+  return { first: parts[0].replace(/[^A-Za-z'-]/g, ""), last: parts[parts.length - 1].replace(/[^A-Za-z'-]/g, "") };
+}
+const INS = {
+  accepted: `<span class="flag" style="color:var(--t600)"><i class="ti ti-circle-check"></i> Appears to accept your insurance</span>`,
+  not_accepted: `<span class="flag" style="color:var(--c400)"><i class="ti ti-circle-x"></i> May not accept your insurance</span>`,
+  unconfirmed: `<span class="flag" style="color:var(--a400)"><i class="ti ti-alert-triangle"></i> Insurance not confirmed</span>`,
+};
+const insFlag = o => INS[o.insurance?.status] || INS.unconfirmed;
+const distLabel = o => o.miles == null ? "Distance unknown" : `${Math.round(o.miles)} mi from you`;
+
+function renderOncologists() {
+  const opts = S.options.options || [];
+  const oncs = S.oncs;
+  const flagged = oncs.filter(o => o.insurance?.status !== "accepted").length;
+  $("oncOut").innerHTML = `
+  <div class="alert al-s"><i class="ti ti-circle-check"></i><span>${oncs.length} oncologists or teams can provide at least one of your options. ${flagged ? `<b>${flagged}</b> are flagged because your insurance is not confirmed or may not be accepted. Call to verify before booking.` : ""}</span></div>
+  <div class="card">
+    <div class="card-hdr"><div class="card-icon" style="background:var(--t50);color:var(--t600)"><i class="ti ti-table"></i></div>
+      <div><div class="card-title">Treatment options and matched oncologists</div><div class="card-sub">Hover a number to see it on the map</div></div></div>
+    <div class="tblwrap"><table class="tbl" id="matchTbl"><thead><tr><th style="width:34%">Option</th><th style="width:18%">Source</th><th>Matched oncologists or teams</th></tr></thead><tbody>
+    ${opts.map(o => { const m = oncs.filter(x => (x.option_ids || []).includes(o.id)); return `<tr data-opt="${esc(o.id)}"><td><b>${esc(o.option)}</b></td><td>${srcTags(o.sources)}</td><td>${m.length ? m.map(x => `<span class="chip" data-onc="${x.n}"><span class="num" style="background:${x.color}">${x.n}</span>${esc(x.name)}${x.insurance?.status !== "accepted" ? ` <i class="ti ti-alert-triangle" style="color:var(--a400)" title="Insurance not confirmed"></i>` : ""}</span>`).join("") : `<span class="small">No match found nearby</span>`}</td></tr>`; }).join("")}
+    </tbody></table></div>
+  </div>
+  <div class="onc-layout">
+    <div class="card" style="margin:0">
+      <div class="card-hdr"><div class="card-icon" style="background:var(--b50);color:var(--b600)"><i class="ti ti-map-2"></i></div>
+        <div><div class="card-title">Map</div><div class="card-sub">★ your location · numbers match the table · hover a pin for details</div></div></div>
+      <div id="map2" class="map big"></div>
+    </div>
+    <div class="panel" id="oncPanel"></div>
+  </div>
+  <details class="card" style="margin-top:.9rem"><summary style="cursor:pointer;font-weight:600">Web pages Claude reviewed (${S.oncSources.length})</summary>
+    <div class="small" style="margin-top:8px">${S.oncSources.map(s => `<div>• ${link(s.url, s.title)}</div>`).join("")}</div></details>`;
+
+  if (map2) map2.remove();
+  map2 = makeMap("map2");
+  map2Layer = L.layerGroup().addTo(map2);
+  map2.invalidateSize();
+  const pts = [];
+  if (S.place) { L.marker([S.place.lat, S.place.lng], { icon: homeIcon(), zIndexOffset: 1000 }).addTo(map2Layer).bindPopup("<b>Your preferred location</b><br>" + esc(S.place.label)); pts.push([S.place.lat, S.place.lng]); if (radius()) L.circle([S.place.lat, S.place.lng], { radius: radius() * 1609.34, color: "#1D9E75", weight: 1, fillOpacity: .04 }).addTo(map2Layer); }
+  for (const o of oncs) {
+    if (o.lat == null) continue;
+    o.marker = L.marker([o.lat, o.lng], { icon: numIcon(o.n, o.color) }).addTo(map2Layer);
+    o.marker.bindPopup(popupHtml(o), { autoPan: false, closeButton: false });
+    o.marker.on("mouseover", () => activate(o.n, true));
+    o.marker.on("click", () => activate(o.n, true));
+    pts.push([o.lat, o.lng]);
+  }
+  // extra room at the top so hover popups (which open above a pin) stay inside the map
+  if (pts.length) map2.fitBounds(pts, { paddingTopLeft: [40, 170], paddingBottomRight: [40, 30], maxZoom: 12 });
+  setTimeout(() => map2.invalidateSize(), 50);
+
+  document.querySelectorAll("#matchTbl .chip").forEach(c => {
+    c.addEventListener("mouseenter", () => activate(+c.dataset.onc, false));
+    c.addEventListener("click", () => activate(+c.dataset.onc, false));
+  });
+  if (oncs.length) activate(oncs[0].n, false); else $("oncPanel").innerHTML = `<div class="small">No oncologists matched. Try a larger travel distance in step 2.</div>`;
+}
+function popupHtml(o) {
+  const opts = (S.options.options || []).filter(x => (o.option_ids || []).includes(x.id));
+  return `<b>${o.n}. ${esc(o.name)}</b>${o.credentials ? `, ${esc(o.credentials)}` : ""}<br>${esc(o.institution)}<br>
+    <span style="color:#555">${esc(distLabel(o))}</span><br>
+    <b>Can provide:</b> ${opts.map(x => esc(x.option)).join("; ")}<br>
+    ${safeUrl(o.profile_url) ? `<a href="${esc(o.profile_url)}" target="_blank" rel="noopener">Open oncologist's webpage ↗</a>` : ""}`;
+}
+function activate(n, fromMap) {
+  const o = S.oncs.find(x => x.n === n);
+  if (!o) return;
+  S.activeOnc = n;
+  // link map ↔ table
+  document.querySelectorAll("#matchTbl tr[data-opt]").forEach(tr => tr.classList.toggle("hl", (o.option_ids || []).includes(tr.dataset.opt)));
+  document.querySelectorAll("#matchTbl .chip").forEach(c => c.classList.toggle("on", +c.dataset.onc === n));
+  for (const x of S.oncs) if (x.marker) x.marker.setIcon(numIcon(x.n, x.color, x.n === n));
+  if (o.marker) o.marker.openPopup();
+  $("oncPanel").innerHTML = panelHtml(o);
+}
+function panelHtml(o) {
+  const opts = (S.options.options || []).filter(x => (o.option_ids || []).includes(x.id));
+  const pm = o.pubmed;
+  return `<div class="row" style="align-items:flex-start;flex-wrap:nowrap;margin-bottom:8px">
+      <span class="pnum" style="background:${o.color};width:28px;height:28px;font-size:13px">${o.n}</span>
+      <div style="min-width:0"><div style="font-weight:700;font-size:15px">${esc(o.name)}${o.credentials ? `, ${esc(o.credentials)}` : ""}</div>
+      <div class="small">${esc(o.institution)}${o.department ? ` · ${esc(o.department)}` : ""}</div></div></div>
+    <div style="margin-bottom:8px">${insFlag(o)}${o.insurance?.note ? `<div class="small">${esc(o.insurance.note)} ${link(o.insurance.url, "source")}</div>` : ""}</div>
+    <div class="sgrid" style="grid-template-columns:1fr 1fr;margin-bottom:8px">
+      <div class="si"><strong>Specialty</strong>${esc(o.specialty || "—")}${o.focus ? `<div class="small">${esc(o.focus)}</div>` : ""}</div>
+      <div class="si"><strong>Experience</strong>${esc(o.years_experience || "Not found")}${o.experience_basis ? `<div class="small">${esc(o.experience_basis)}</div>` : ""}</div>
+      <div class="si"><strong>Distance</strong>${esc(distLabel(o))}${o.outside ? `<div class="small" style="color:var(--a400)">Beyond your travel limit</div>` : ""}</div>
+      <div class="si"><strong>Contact</strong>${esc(o.phone || "—")}<div class="small">${esc(o.address || "")}</div></div>
+    </div>
+    <div class="slbl">Can provide</div>
+    <div style="margin-bottom:6px">${opts.map(x => `<div>• ${esc(x.option)} ${srcTags(x.sources)}</div>`).join("")}<div class="small">${esc(o.option_rationale || "")}</div></div>
+    <div class="slbl" style="margin-top:10px">Research activity</div>
+    <div class="small" style="color:var(--text)">
+      ${o.trialsLed?.length ? `<div><b>Leading recruiting trials:</b> ${o.trialsLed.map(t => link("https://clinicaltrials.gov/study/" + t.nct, t.nct)).join(", ")}</div>` : `<div>No recruiting trials found under this name on ClinicalTrials.gov.</div>`}
+      ${pm ? `<div style="margin-top:4px"><b>PubMed:</b> ${pm.count} articles on ${esc(S.disease.search?.condition || "this cancer")} by an author with this name${pm.items.length ? ". Latest:" : ""}</div>${pm.items.map(p => `<div>• ${link(p.url, p.title)} <span class="small">${esc(p.journal)}, ${esc(p.date)}</span></div>`).join("")}` : ""}
+      ${(o.conference_activity || []).length ? `<div style="margin-top:4px"><b>ASCO / ESMO:</b></div>${o.conference_activity.map(c => `<div>• ${link(c.url, c.label)}</div>`).join("")}` : ""}
+    </div>
+    <div class="row" style="margin-top:10px">
+      ${safeUrl(o.profile_url) ? `<a class="btn btn-p" href="${esc(o.profile_url)}" target="_blank" rel="noopener"><i class="ti ti-external-link"></i> Oncologist's webpage</a>` : ""}
+      ${o.address ? `<a class="btn btn-o" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(o.address)}" target="_blank" rel="noopener"><i class="ti ti-directions"></i> Directions</a>` : ""}
+    </div>
+    <div class="small" style="margin-top:8px">Profile details come from public webpages and may be out of date. Confirm with the office.</div>`;
+}
+</script>
+</body>
+</html>
